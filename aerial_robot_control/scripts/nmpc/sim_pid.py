@@ -19,6 +19,8 @@ import archive.phys_param_beetle_art as phys_art
 from archive.tilt_qd_no_servo_ac_cost import NMPCTiltQdNoServoAcCost
 from tilt_qd.tilt_qd_no_servo import NMPCTiltQdNoServo
 
+
+from hydrus.hydrus_thrust import HydrusThrust
 # - Consider the servo delay with its model
 from tilt_qd.tilt_qd_servo import NMPCTiltQdServo
 from tilt_qd.tilt_qd_servo_dist import NMPCTiltQdServoDist
@@ -48,11 +50,11 @@ from tilt_tri.tilt_tri_servo_dist import NMPCTiltTriServoDist
 def main(args):
     # ========== Init ==========
     # ---------- Controller ----------
-    print("aaa")
+    print("aaaaaaa")
     if args.arch == 'qd':
 
         if args.model == 0:
-            nmpc = NMPCTiltQdNoServo(phys=phys_art)
+            nmpc = HydrusThrust(phys=phys_art)
         elif args.model == 1:
             nmpc = NMPCTiltQdServo(phys=phys_art)
         elif args.model == 2:
@@ -102,14 +104,18 @@ def main(args):
 
     else:
         raise ValueError(f"Invalid robot architecture {args.arch}.")
-    print("bbb")
+    print("aaaaaaa")
+    x_history = []
+    u_history = []
+
+    return np.array(x_history), np.array(u_history)
     # Get time constants
     if nmpc.include_servo_model:
         t_servo_ctrl = nmpc.phys.t_servo
     else:
         t_servo_ctrl = 0.0
     ts_ctrl = nmpc.params["T_samp"]
-    print("ccc")
+
     # OCP solver
     ocp_solver = nmpc.get_ocp_solver()
     nx = ocp_solver.acados_ocp.dims.nx
@@ -124,10 +130,6 @@ def main(args):
         ocp_solver.set(stage, "x", x_init)
     for stage in range(ocp_solver.N):
         ocp_solver.set(stage, "u", u_init)
-    x_history = []
-    u_history = []
-
-    return np.array(x_history), np.array(u_history)
 
     # ---------- Simulator ----------
     if args.arch == 'qd':
