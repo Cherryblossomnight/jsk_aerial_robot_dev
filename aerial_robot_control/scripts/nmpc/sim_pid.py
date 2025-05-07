@@ -3,18 +3,20 @@ from copy import deepcopy
 import time
 import numpy as np
 import argparse
+from tf.transformations import euler_from_quaternion
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_bi")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_tri")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_qd")
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/hydrus")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/archive")
 
-from nmpc_viz import Visualizer
+from pid_viz import Visualizer
 
 # Quadrotor
 import tilt_qd.phys_param_beetle_omni as phys_omni
 import archive.phys_param_beetle_art as phys_art
-
+import hydrus.phys_param_hydrus as phys_hydrus
 # - Naive models
 from archive.tilt_qd_no_servo_ac_cost import NMPCTiltQdNoServoAcCost
 from tilt_qd.tilt_qd_no_servo import NMPCTiltQdNoServo
@@ -50,11 +52,10 @@ from tilt_tri.tilt_tri_servo_dist import NMPCTiltTriServoDist
 def main(args):
     # ========== Init ==========
     # ---------- Controller ----------
-    print("aaaaaaa")
     if args.arch == 'qd':
 
         if args.model == 0:
-            nmpc = HydrusThrust(phys=phys_art)
+            nmpc = HydrusThrust(phys=phys_hydrus)
         elif args.model == 1:
             nmpc = NMPCTiltQdServo(phys=phys_art)
         elif args.model == 2:
@@ -104,11 +105,7 @@ def main(args):
 
     else:
         raise ValueError(f"Invalid robot architecture {args.arch}.")
-    print("aaaaaaa")
-    x_history = []
-    u_history = []
-
-    return np.array(x_history), np.array(u_history)
+   
     # Get time constants
     if nmpc.include_servo_model:
         t_servo_ctrl = nmpc.phys.t_servo
@@ -124,7 +121,10 @@ def main(args):
 
     x_init = np.zeros(nx)
     x_init[6] = 1.0  # qw
+    x_init[13:16] = [np.pi/2, np.pi/2, np.pi/2]   # joint angles state
     u_init = np.zeros(nu)
+    u_init[0:4] = [8.3283, 8.3283, 8.3283, 8.3283]  # thrust
+    u_init[4:7] = [np.pi/2, np.pi/2, np.pi/2]   # joint angles command
 
     for stage in range(ocp_solver.N + 1):
         ocp_solver.set(stage, "x", x_init)
@@ -133,14 +133,14 @@ def main(args):
 
     # ---------- Simulator ----------
     if args.arch == 'qd':
-
-        sim_phy = phys_omni if 20 < args.model < 30 else phys_art
-        if args.sim_model == 0:
-            sim_nmpc = NMPCTiltQdServoThrust(phys=sim_phy)  # Consider both the servo delay and the thrust delay
-        elif args.sim_model == 1:
-            sim_nmpc = NMPCTiltQdServoThrustDrag(phys=sim_phy)  # Also consider drag in wrench formulation
-        else:
-            raise ValueError(f"Invalid sim model {args.sim_model}.")
+        sim_nmpc = HydrusThrust(phys=phys_hydrus)
+        # sim_phy = phys_omni if 20 < args.model < 30 else phys_art
+        # if args.sim_model == 0:
+        #     sim_nmpc = NMPCTiltQdServoThrust(phys=sim_phy)  # Consider both the servo delay and the thrust delay
+        # elif args.sim_model == 1:
+        #     sim_nmpc = NMPCTiltQdServoThrustDrag(phys=sim_phy)  # Also consider drag in wrench formulation
+        # else:
+        #     raise ValueError(f"Invalid sim model {args.sim_model}.")
 
     elif args.arch == 'bi':
 
@@ -177,15 +177,16 @@ def main(args):
         t_total_sim = 3.0
 
     N_sim = int(t_total_sim / ts_sim)
+ 
 
     # Sim solver
     sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, is_build=True)
     nx_sim = sim_solver.acados_sim.dims.nx
-
+    nr = 9
+    r_init = [0.3, 0.6, 1.0, 0.0, 0.0, 0.0, np.pi/2, np.pi/2, np.pi/2]
     # State Initialization
     x_init_sim = np.zeros(nx_sim)
     x_init_sim[6] = 1.0  # qw
-
     # ---------- Reference ----------
     reference_generator = nmpc.get_reference_generator()
 
@@ -194,12 +195,15 @@ def main(args):
         args.arch,
         N_sim,
         nx_sim,
+        nr,
         nu,
         x_init_sim,
+        r_init,
         tilt=nmpc.tilt,
         include_servo_model=sim_nmpc.include_servo_model,
         include_thrust_model=sim_nmpc.include_thrust_model,
-        include_cog_dist_model=sim_nmpc.include_cog_dist_model
+        include_cog_dist_model=sim_nmpc.include_cog_dist_model,
+        is_reference=True,
     )
 
     # Prepare containers to record simulation data (x and u) for future comparison
@@ -211,6 +215,7 @@ def main(args):
     t_sqp_end = 3.0
 
     # ========== Run simulation ==========
+
     u_cmd = u_init
     t_ctl = 0.0
     x_now_sim = x_init_sim
@@ -243,16 +248,17 @@ def main(args):
 
         if args.plot_type == 2:
             target_xyz = np.array([[0.0, 0.0, 0.0]]).T
-            target_rpy = np.array([[0.5, 0.5, 0.5]]).T
+            target_rpy = np.array([[0.0, 0.0, 0.5]]).T
 
         if t_total_sim > 2.0:
             if 2.0 <= t_now < 6:
-                target_xyz = np.array([[0.3, 0.6, 1.0]]).T
+                target_xyz = np.array([[0.3, 0.6, 2.0]]).T
 
                 roll = 30.0 / 180.0 * np.pi
                 pitch = 60.0 / 180.0 * np.pi
-                yaw = 90.0 / 180.0 * np.pi
-                target_rpy = np.array([[roll, pitch, yaw]]).T
+                yaw = 30.0 / 180.0 * np.pi
+                target_rpy = np.array([[roll, pitch, 0.0]]).T
+                
 
             # if 3.0 <= t_now < 5.5:
             #     assert t_sqp_end <= 3.0
@@ -268,9 +274,16 @@ def main(args):
 
             if t_now >= 6:
                 assert t_sqp_end <= 3.0
-                target_xyz = np.array([[1.0, 1.0, 1.0]]).T
+                target_xyz = np.array([[0.3, 0.6, 2.0]]).T
                 target_rpy = np.array([[0.0, 0.0, 0.0]]).T
-
+                x_now_sim[16:22] = [0.0, 0.0, 6.0, 0.0, 0.0, 0.0]  # joint angles state
+            if t_now >= 8:
+                x_now_sim[16:22] = [0.0, 3.0, 0.0, 0.0, 0.0, 0.0]
+            if t_now >= 10:
+                u_cmd[4:7] = [np.pi/2, 0, 0]  # joint angles command
+                x_now_sim[16:22] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.3]
+            if t_now >= 14:
+                x_now_sim[16:22] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         # Compute reference trajectory from target pose
         xr, ur = reference_generator.compute_trajectory(target_xyz, target_rpy)
 
@@ -294,46 +307,58 @@ def main(args):
 
         # -------- Update solver --------
         comp_time_start = time.time()
-
+        # -------- PID Controller --------
+        # if t_ctl >= ts_ctrl:
+        #     t_ctl = 0.0
+        #     z_acc = 24.0*(target_xyz[2,0]-x_now[2])+10.0*(0.0-x_now[5]) + 9.798*3.4
+        #     quat = [x_now[7], x_now[8], x_now[9], x_now[6]]
+        #     roll, pitch, yaw = euler_from_quaternion(quat)
+        #     x_acc = 1.0*(target_xyz[0,0]-x_now[0]) + 1.6*(0.0-x_now[3])
+        #     y_acc = 1.0*(target_xyz[1,0]-x_now[1]) + 1.6*(0.0-x_now[4])
+        #     target_roll = -y_acc / 9.798
+        #     target_pitch = x_acc / 9.798
+        #     roll_acc = 9.0*(target_roll-roll) + 5.0*(0.0-x_now[10])
+        #     pitch_acc = 9.0*(target_pitch-pitch) + 5.0*(0.0-x_now[11])
+        #     yaw_acc = 9.0*(target_rpy[2,0]-yaw) + 6.0*(0.0-x_now[12])
+        #     mat = nmpc.get_alloc_matrix(nmpc.acados_init_p[4:30], x_now)
+    
+        #     delta_u = np.linalg.pinv(mat) @ np.array([z_acc, roll_acc, pitch_acc, yaw_acc])
+        #     u_cmd[0:4] = np.squeeze(np.asarray(delta_u)) 
+        # -------- Impedance Controller --------
         if t_ctl >= ts_ctrl:
             t_ctl = 0.0
-
-            # 0 ~ N-1
-            for j in range(ocp_solver.N):
-                yr = np.concatenate((xr[j, :], ur[j, :]))
-                ocp_solver.set(j, "yref", yr)
-                quaternion_r = xr[j, 6:10]
-                nmpc.acados_init_p[0:4] = quaternion_r
-                ocp_solver.set(j, "p", nmpc.acados_init_p)  # For nonlinear quaternion error
-
-            # N
-            yr = xr[ocp_solver.N, :]
-            ocp_solver.set(ocp_solver.N, "yref", yr)  # Final state of x, no u
-            quaternion_r = xr[ocp_solver.N, 6:10]
-            nmpc.acados_init_p[0:4] = quaternion_r
-            ocp_solver.set(ocp_solver.N, "p", nmpc.acados_init_p)  # For nonlinear quaternion error
-
-            # Compute control feedback and take the first action
-            try:
-                u_cmd = ocp_solver.solve_for_x0(x_now)
-            except Exception as e:
-                print(f"Round {i}: acados ocp_solver returned status {ocp_solver.status}. Exiting.")
-                break
-
-        comp_time_end = time.time()
-        viz.comp_time[i] = comp_time_end - comp_time_start
-
-        if args.arch == 'qd':
-            # Use previous servo angle as reference
-            if type(nmpc) is NMPCTiltQdNoServoAcCost:
-                nmpc.update_a_prev(u_cmd.item(4), u_cmd.item(5), u_cmd.item(6), u_cmd.item(7))
-
-            # Use servo angle derivative as state and therefore integrate servo angle command
-            if nmpc.include_servo_derivative:
-                alpha_integ += u_cmd[4:] * ts_ctrl
-                u_cmd[4:] = alpha_integ  # convert from delta input to real input
+            z_acc = 24.0*(target_xyz[2,0]-x_now[2])+10.0*(0.0-x_now[5]) + 9.798*3.4
+            quat = [x_now[7], x_now[8], x_now[9], x_now[6]]
+            roll, pitch, yaw = euler_from_quaternion(quat)
+            x_acc = 1.0*(target_xyz[0,0]-x_now[0]) + 1.6*(0.0-x_now[3])
+            y_acc = 1.0*(target_xyz[1,0]-x_now[1]) + 1.6*(0.0-x_now[4])
+            target_roll = -y_acc / 9.798
+            target_pitch = x_acc / 9.798
+            target_rpy[0,0] = target_roll   
+            target_rpy[1,0] = target_pitch
+            I = nmpc.get_I_matrix(nmpc.acados_init_p[4:30], x_now)
+            I_d = np.matrix([[0.2, 0.0, 0.0],
+                            [0.0, 0.2, 0.0],
+                            [0.0, 0.0, 0.4]])
+            Kp = np.matrix([[9.0, 0.0, 0.0],
+                            [0.0, 9.0, 0.0],
+                            [0.0, 0.0, 9.0]])
+            Kd = np.matrix([[5.0, 0.0, 0.0],
+                            [0.0, 5.0, 0.0],
+                            [0.0, 0.0, 6.0]])
+            delta_x = np.array([target_roll-roll, target_pitch-pitch, target_rpy[2,0]-yaw])
+            delta_v = np.array([0.0-x_now[10], 0.0-x_now[11], 0.0-x_now[12]])
+    
+            c_vector = nmpc.get_c_vector(nmpc.acados_init_p[4:30], x_now)
+            euler_acc = ((I * I_d.I - np.eye(3)) @ x_now[19:22]).reshape(3, 1) + I*I_d.I*(Kp @ delta_x + Kd @ delta_v).reshape(3, 1) + c_vector.reshape(3, 1)
+            euler_acc = np.squeeze(np.asarray(euler_acc)) 
+            mat = nmpc.get_alloc_matrix(nmpc.acados_init_p[4:30], x_now)
+           
+            delta_u = np.linalg.pinv(mat) @ np.array([z_acc, euler_acc[0], euler_acc[1], euler_acc[2]])
+            u_cmd[0:4] = np.squeeze(np.asarray(delta_u)) 
 
         # --------- Update simulation ----------
+
         sim_solver.set("x", x_now_sim)
         sim_solver.set("u", u_cmd)
 
@@ -346,9 +371,9 @@ def main(args):
         # Save current simulation data for later comparison
         x_history.append(x_now_sim.copy())
         u_history.append(u_cmd.copy())
-
+        r_now = [target_xyz[0,0], target_xyz[1,0], target_xyz[2,0], target_rpy[0,0], target_rpy[1,0], target_rpy[2,0], u_cmd[4], u_cmd[5], u_cmd[6]]
         # --------- Update visualizer ----------
-        viz.update(i, x_now_sim, u_cmd)  # Note: The recording frequency of u_cmd is the same as ts_sim
+        viz.update(i, x_now_sim, r_now, u_cmd)  # Note: The recording frequency of u_cmd is the same as ts_sim
 
     # ========== Visualize ==========
     if not args.no_viz:
@@ -382,7 +407,6 @@ def main(args):
             x=np.array(x_history),
             u=np.array(u_history)
         )
-
     return np.array(x_history), np.array(u_history)
 
 

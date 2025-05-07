@@ -1,8 +1,8 @@
 import numpy as np
 from tf_conversions import transformations as tf
+import casadi as ca
 
-
-class QDNMPCReferenceGenerator():
+class HydrusReferenceGenerator():
     """
     Class to generate reference trajectories.
 
@@ -104,8 +104,10 @@ class QDNMPCReferenceGenerator():
         self.alloc_mat[5, 7] = -dr4 * kq_d_kt
 
     def _compute_alloc_mat_pinv(self):
-        self.alloc_mat_pinv = np.linalg.pinv(self.alloc_mat)
-    
+        #self.alloc_mat_pinv = np.linalg.pinv(self.alloc_mat)
+        # print(self.alloc_mat)
+        pass
+       
     def compute_trajectory(self, target_xyz, target_rpy):
         """
         Convert current target pose to a reference trajectory over the entire horizon.
@@ -132,26 +134,26 @@ class QDNMPCReferenceGenerator():
         target_wrench = np.array([[fg_b.item(0), fg_b.item(1), fg_b.item(2), 0, 0, 0]]).T
 
         # A faster method if alloc_mat is dynamic:  x, _, _, _ = np.linalg.lstsq(alloc_mat, target_wrench, rcond=None)
-        target_force = self.alloc_mat_pinv @ target_wrench
+        # target_force = self.alloc_mat_pinv @ target_wrench
         
-        # Compute reference values for thrust
-        # Set either state or control input based on model properties, i.e., based on include flags
-        ft1_ref = np.sqrt(target_force[0, 0] ** 2 + target_force[1, 0] ** 2)
-        ft2_ref = np.sqrt(target_force[2, 0] ** 2 + target_force[3, 0] ** 2)
-        ft3_ref = np.sqrt(target_force[4, 0] ** 2 + target_force[5, 0] ** 2)
-        ft4_ref = np.sqrt(target_force[6, 0] ** 2 + target_force[7, 0] ** 2)
-        ft_ref = [ft1_ref, ft2_ref, ft3_ref, ft4_ref]
+        # # Compute reference values for thrust
+        # # Set either state or control input based on model properties, i.e., based on include flags
+        # ft1_ref = np.sqrt(target_force[0, 0] ** 2 + target_force[1, 0] ** 2)
+        # ft2_ref = np.sqrt(target_force[2, 0] ** 2 + target_force[3, 0] ** 2)
+        # ft3_ref = np.sqrt(target_force[4, 0] ** 2 + target_force[5, 0] ** 2)
+        # ft4_ref = np.sqrt(target_force[6, 0] ** 2 + target_force[7, 0] ** 2)
+        # ft_ref = [ft1_ref, ft2_ref, ft3_ref, ft4_ref]
 
-        # Compute reference values for servo angles
-        # Set either state or control input based on model properties, i.e., based on include flags
-        a1_ref = np.arctan2(target_force[0, 0], target_force[1, 0])
-        a2_ref = np.arctan2(target_force[2, 0], target_force[3, 0])
-        a3_ref = np.arctan2(target_force[4, 0], target_force[5, 0])
-        a4_ref = np.arctan2(target_force[6, 0], target_force[7, 0])
-        a_ref = [a1_ref, a2_ref, a3_ref, a4_ref]
+        # # Compute reference values for servo angles
+        # # Set either state or control input based on model properties, i.e., based on include flags
+        # a1_ref = np.arctan2(target_force[0, 0], target_force[1, 0])
+        # a2_ref = np.arctan2(target_force[2, 0], target_force[3, 0])
+        # a3_ref = np.arctan2(target_force[4, 0], target_force[5, 0])
+        # a4_ref = np.arctan2(target_force[6, 0], target_force[7, 0])
+        # a_ref = [a1_ref, a2_ref, a3_ref, a4_ref]
             
         # Assemble reference trajectories in controller file since their definition is 
         # closely related to the cost function
-        xr, ur = self.nmpc.get_reference(target_xyz, target_qwxyz, ft_ref, a_ref)
-
+        # xr, ur = self.nmpc.get_reference(target_xyz, target_qwxyz, ft_ref, a_ref)
+        xr, ur = self.nmpc.get_reference(target_xyz, target_qwxyz)
         return xr, ur

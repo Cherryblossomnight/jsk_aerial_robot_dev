@@ -20,11 +20,11 @@ class HydrusThrust(HydrusBase):
         self.model_name = "hydrus_thrust"
         self.phys = phys
 
-        self.tilt = True
+        self.tilt = False
         self.include_servo_model = True
         self.include_servo_derivative = False
-        self.include_thrust_model = True   # TODO extend to include_thrust_derivative
-        self.include_cog_dist_model = False
+        self.include_thrust_model = False   # TODO extend to include_thrust_derivative
+        self.include_cog_dist_model = True
         self.include_cog_dist_parameter = False
         self.include_impedance = False
 
@@ -51,16 +51,14 @@ class HydrusThrust(HydrusBase):
             qe_y + self.qyr,
             qe_z + self.qzr,
             self.w,
-            self.a_s,
-            self.ft_s
+            self.j_s,
+            self.fds_w,
+            self.tau_ds_b
         )
 
         state_y_e = state_y
 
-        control_y = ca.vertcat(
-            self.ft_c - self.ft_s,  # ft_c_ref must be zero!
-            self.a_c - self.a_s     # a_c_ref must be zero!
-        )
+        control_y = ca.vertcat(self.ft_c, self.j_c)
 
         return state_y, state_y_e, control_y
 
@@ -81,14 +79,15 @@ class HydrusThrust(HydrusBase):
                 self.params["Qw_xy"],
                 self.params["Qw_xy"],
                 self.params["Qw_z"],
-                self.params["Qa"],
-                self.params["Qa"],
-                self.params["Qa"],
-                self.params["Qa"],
-                self.params["Qa"],
-                self.params["Qa"],
-                self.params["Qa"],
-                self.params["Qa"],
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
             ]
         )
         print("Q: \n", Q)
@@ -99,17 +98,16 @@ class HydrusThrust(HydrusBase):
                 1,
                 1,
                 1,
-                self.params["Rac_d"],
-                self.params["Rac_d"],
-                self.params["Rac_d"],
-                self.params["Rac_d"],
+                1,
+                1,
+                1,
             ]
         )
         print("R: \n", R)
 
         return Q, R
     
-    def get_reference(self, target_xyz, target_qwxyz, ft_ref, a_ref):
+    def get_reference(self, target_xyz, target_qwxyz):
         """
         Assemble reference trajectory from target pose and reference control values.
         Gets called from reference generator class.
@@ -138,18 +136,14 @@ class HydrusThrust(HydrusBase):
         xr[:, 8] = target_qwxyz[2]     # qy
         xr[:, 9] = target_qwxyz[3]     # qz
         # No reference for wx, wy, wz (idx: 10, 11, 12)
-        xr[:, 13] = a_ref[0]
-        xr[:, 14] = a_ref[1]
-        xr[:, 15] = a_ref[2]
-        xr[:, 16] = a_ref[3]
-        xr[:, 17] = ft_ref[0]
-        xr[:, 18] = ft_ref[1]
-        xr[:, 19] = ft_ref[2]
-        xr[:, 20] = ft_ref[3]
 
-        # Assemble input reference
+        # Assemble control reference
         # Note: Reference has to be zero if variable is included as state in cost function!
         ur = np.zeros([nn, nu])
+        # ur[:, 0] = ft_ref[0]
+        # ur[:, 1] = ft_ref[1]
+        # ur[:, 2] = ft_ref[2]
+        # ur[:, 3] = ft_ref[3]
         
         return xr, ur
 

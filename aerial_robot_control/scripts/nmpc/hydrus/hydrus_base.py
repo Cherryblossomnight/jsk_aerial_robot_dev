@@ -102,13 +102,12 @@ class HydrusBase(RecedingHorizonBase):
         # Differentiate between actual angles and control angles
         # Note: If servo angle is not used as control input the model for omnidirectional Quadrotor
         # has been observed to be unstable (see https://arxiv.org/abs/2405.09871).
-        if self.tilt and self.include_servo_model:
-            self.a1s = ca.SX.sym("a1s")
-            self.a2s = ca.SX.sym("a2s")
-            self.a3s = ca.SX.sym("a3s")
-            self.a4s = ca.SX.sym("a4s")
-            self.a_s = ca.vertcat(self.a1s, self.a2s, self.a3s, self.a4s)
-            states = ca.vertcat(states, self.a_s)
+        if self.include_servo_model:
+            self.j1s = ca.SX.sym("j1s")
+            self.j2s = ca.SX.sym("j2s")
+            self.j3s = ca.SX.sym("j3s")
+            self.j_s = ca.vertcat(self.j1s, self.j2s, self.j3s)
+            states = ca.vertcat(states, self.j_s)
 
         # - Extend state-space by dynamics of rotor (actual)
         # Differentiate between actual thrust and control thrust
@@ -140,25 +139,20 @@ class HydrusBase(RecedingHorizonBase):
         self.ft3c = ca.SX.sym("ft3c")
         self.ft4c = ca.SX.sym("ft4c")
         self.ft_c = ca.vertcat(self.ft1c, self.ft2c, self.ft3c, self.ft4c)
-        self.theta1 = ca.SX.sym("theta1")  # Joint angles
-        self.theta2 = ca.SX.sym("theta2")
-        self.theta3 = ca.SX.sym("theta3");
-        self.theta = ca.vertcat(self.theta1, self.theta2, self.theta13)
-        controls = ca.vertcat(self.ft1c, self.ft2c, self.ft3c, self.ft4c, self.theta1, self.theta2, self.theta3)
+        controls = ca.vertcat(self.ft1c, self.ft2c, self.ft3c, self.ft4c)
         # - Servo angle for tiltable rotors (actuated)
-        if self.tilt:
-            self.a1c = ca.SX.sym("a1c")
-            self.a2c = ca.SX.sym("a2c")
-            self.a3c = ca.SX.sym("a3c")
-            self.a4c = ca.SX.sym("a4c")
+        if self.include_servo_model:       
+            self.j1c = ca.SX.sym("j1c")# Joint angles
+            self.j2c = ca.SX.sym("j2c")
+            self.j3c = ca.SX.sym("j3c")
             # Either use the time-derivative of the servo angle as control input directly
             if self.include_servo_derivative:
                 self.ad_c = ca.vertcat(self.a1c, self.a2c, self.a3c, self.a4c)
                 controls = ca.vertcat(controls, self.ad_c)
             # Or use numerical differentation to calculate time-derivate in dynamical model
             else:
-                self.a_c = ca.vertcat(self.a1c, self.a2c, self.a3c, self.a4c)
-                controls = ca.vertcat(controls, self.a_c)
+                self.j_c = ca.vertcat(self.j1c, self.j2c, self.j3c)
+                controls = ca.vertcat(controls, self.j_c)
 
         # Model parameters
         self.qwr = ca.SX.sym("qwr")  # Reference for quaternions
@@ -177,28 +171,31 @@ class HydrusBase(RecedingHorizonBase):
         mass = ca.vertcat(m1, m2, m3, m4)
         gravity = ca.SX.sym("gravity")
 
-        Ixx = ca.SX.sym("Ixx")
-        Iyy = ca.SX.sym("Iyy")
-        Izz = ca.SX.sym("Izz")
+        I1xx = ca.SX.sym("I1xx")
+        I1yy = ca.SX.sym("I1yy")
+        I1zz = ca.SX.sym("I1zz")
+        I2xx = ca.SX.sym("I2xx")
+        I2yy = ca.SX.sym("I2yy")
+        I2zz = ca.SX.sym("I2zz")
+        I3xx = ca.SX.sym("I3xx")
+        I3yy = ca.SX.sym("I3yy")
+        I3zz = ca.SX.sym("I3zz")
+        I4xx = ca.SX.sym("I4xx")
+        I4yy = ca.SX.sym("I4yy")
+        I4zz = ca.SX.sym("I4zz")
 
+        self.kq_d_kt = ca.SX.sym("kq_d_kt")
 
-        kq_d_kt = ca.SX.sym("kq_d_kt")
-
-        dr1 = ca.SX.sym("dr1")
-        dr2 = ca.SX.sym("dr2")
-        dr3 = ca.SX.sym("dr3")
-        dr4 = ca.SX.sym("dr4")
-
-        p1_b = ca.SX.sym("p1_b", 3)
-        p2_b = ca.SX.sym("p2_b", 3)
-        p3_b = ca.SX.sym("p3_b", 3)
-        p4_b = ca.SX.sym("p4_b", 3)
+        self.dr1 = ca.SX.sym("dr1")
+        self.dr2 = ca.SX.sym("dr2")
+        self.dr3 = ca.SX.sym("dr3")
+        self.dr4 = ca.SX.sym("dr4")
 
         t_rotor = ca.SX.sym("t_rotor")
         t_servo = ca.SX.sym("t_servo")
 
-        phy_params = ca.vertcat(mass, gravity, Ixx, Iyy, Izz, kq_d_kt,
-                                dr1, p1_b, dr2, p2_b, dr3, p3_b, dr4, p4_b, t_rotor, t_servo)
+        phy_params = ca.vertcat(l, mass, m, gravity, I1xx, I1yy, I1zz, I2xx, I2yy, I2zz, I3xx, I3yy, I3zz, I4xx, I4yy, I4zz, self.kq_d_kt,
+                                self.dr1, self.dr2, self.dr3, self.dr4, t_rotor, t_servo)
         parameters = ca.vertcat(parameters, phy_params)
 
         # - Extend model parameters by CoG disturbance
@@ -233,23 +230,27 @@ class HydrusBase(RecedingHorizonBase):
         # Transformation matrices between coordinate systems World, Body, End-of-arm, Rotor using quaternions
         # - Root to CoG
         rot_r2c = ca.vertcat(
-                ca.horzcat(ca.cos(self.theta1), -ca.sin(self.theta1), 0), ca.horzcat(ca.sin(self.theta1), ca.cos(self.theta1), 0), ca.horzcat(0, 0, 1)
-            )
-        
-        l_vec = ca.vertcat(l, 0, 0)
+                ca.horzcat(ca.cos(self.j1s), -ca.sin(self.j1s), 0), ca.horzcat(ca.sin(self.j1s), ca.cos(self.j1s), 0), ca.horzcat(0, 0, 1)
+            ) 
         rot_1_2 = ca.vertcat(
-                ca.horzcat(ca.cos(self.theta1), -ca.sin(self.theta1), 0), ca.horzcat(ca.sin(self.theta1), ca.cos(self.theta1), 0), ca.horzcat(0, 0, 1)
+                ca.horzcat(ca.cos(self.j1s), -ca.sin(self.j1s), 0), ca.horzcat(ca.sin(self.j1s), ca.cos(self.j1s), 0), ca.horzcat(0, 0, 1)
             )
         rot_2_3 = ca.vertcat(
-                ca.horzcat(ca.cos(self.theta2), -ca.sin(self.theta2), 0), ca.horzcat(ca.sin(self.theta2), ca.cos(self.theta2), 0), ca.horzcat(0, 0, 1)
+                ca.horzcat(ca.cos(self.j2s), -ca.sin(self.j2s), 0), ca.horzcat(ca.sin(self.j2s), ca.cos(self.j2s), 0), ca.horzcat(0, 0, 1)
             )
         rot_3_4 = ca.vertcat(
-                ca.horzcat(ca.cos(self.theta3), -ca.sin(self.theta3), 0), ca.horzcat(ca.sin(self.theta3), ca.cos(self.theta3), 0), ca.horzcat(0, 0, 1)
+                ca.horzcat(ca.cos(self.j3s), -ca.sin(self.j3s), 0), ca.horzcat(ca.sin(self.j3s), ca.cos(self.j3s), 0), ca.horzcat(0, 0, 1)
             )
-        tran_r2c = (m1*l_vec/2 + m2*(l_vec+ca.mtimes(rot_1_2, l_vec)) + m3*(l_vec+ca.mtimes(rot_1_2, l_vec)+ca.mtimes(ca.mtimes(rot_2_3, rot_1_2), l_vec)) + m4*(l_vec+ca.mtimes(rot_1_2, l_vec)+ca.mtimes(ca.mtimes(rot_2_3, rot_1_2), l_vec)+ca.mtimes(ca.mtimes(rot_3_4, ca.mtimes(rot_2_3, rot_1_2)), l_vec))) / m
+        l_vec = ca.vertcat(l, 0, 0)
+        l_r1 = l_vec/2
+        l_r2 = l_vec + ca.mtimes(rot_1_2, l_vec/2)
+        l_r3 = l_vec + ca.mtimes(rot_1_2, l_vec) + ca.mtimes(ca.mtimes(rot_2_3, rot_1_2), l_vec/2)
+        l_r4 = l_vec + ca.mtimes(rot_1_2, l_vec) + ca.mtimes(ca.mtimes(rot_2_3, rot_1_2), l_vec) + ca.mtimes(ca.mtimes(rot_3_4, ca.mtimes(rot_2_3, rot_1_2)), l_vec/2)
+
+        tran_r2c = (m1*l_r1 + m2*l_r2 + m3*l_r3 + m4*l_r4) / m
 
         rot_c_1 =  ca.vertcat(
-                ca.horzcat(ca.cos(self.theta1), ca.sin(self.theta1), 0), ca.horzcat(-ca.sin(self.theta1), ca.cos(self.theta1), 0), ca.horzcat(0, 0, 1)
+                ca.horzcat(ca.cos(self.j1s), ca.sin(self.j1s), 0), ca.horzcat(-ca.sin(self.j1s), ca.cos(self.j1s), 0), ca.horzcat(0, 0, 1)
             )
 
         rot_c_2 =  ca.vertcat(
@@ -257,25 +258,21 @@ class HydrusBase(RecedingHorizonBase):
             )
 
         rot_c_3 = ca.vertcat(
-                ca.horzcat(ca.cos(self.theta2), -ca.sin(self.theta2), 0), ca.horzcat(ca.sin(self.theta2), ca.cos(self.theta2), 0), ca.horzcat(0, 0, 1)
+                ca.horzcat(ca.cos(self.j2s), -ca.sin(self.j2s), 0), ca.horzcat(ca.sin(self.j2s), ca.cos(self.j2s), 0), ca.horzcat(0, 0, 1)
             )
 
         rot_c_4 = ca.vertcat(
-                ca.horzcat(ca.cos(self.theta2+self.theta3), -ca.sin(self.theta2+self.theta3), 0), ca.horzcat(ca.sin(self.theta2+self.theta3), ca.cos(self.theta2+self.theta3), 0), ca.horzcat(0, 0, 1)
+                ca.horzcat(ca.cos(self.j2s+self.j3s), -ca.sin(self.j2s+self.j3s), 0), ca.horzcat(ca.sin(self.j2s+self.j3s), ca.cos(self.j2s+self.j3s), 0), ca.horzcat(0, 0, 1)
             )
 
-        tran_c_1 = ca.mtimes(rot_c_1,l_vec/2-tran_r2c)
+        self.tran_c_1 = ca.mtimes(rot_c_1,l_r1-tran_r2c)
 
-        tran_c_2 = ca.mtimes(rot_c_1,l_vec+ca.mtimes(rot_1_2, l_vec)-tran_r2c)
+        self.tran_c_2 = ca.mtimes(rot_c_1,l_r2-tran_r2c)
 
-        tran_c_3 = ca.mtimes(rot_c_1,l_vec+ca.mtimes(ca.mtimes(rot_2_3, rot_1_2))-tran_r2c)
+        self.tran_c_3 = ca.mtimes(rot_c_1,l_r3-tran_r2c)
 
-        tran_c_4 = ca.mtimes(rot_c_1,l_vec+ca.mtimes(ca.mtimes(rot_3_4, ca.mtimes(rot_2_3, rot_1_2)))-tran_r2c)
-        print("aaaaaaaaaaaaaaaaaaa")
+        self.tran_c_4 = ca.mtimes(rot_c_1,l_r4-tran_r2c)
 
-        model = AcadosModel()
-
-        return model
         # - World to Body
         row_1 = ca.horzcat(
             ca.SX(1 - 2 * self.qy ** 2 - 2 * self.qz ** 2), ca.SX(2 * self.qx * self.qy - 2 * self.qw * self.qz),
@@ -291,24 +288,24 @@ class HydrusBase(RecedingHorizonBase):
         )
         rot_wb = ca.vertcat(row_1, row_2, row_3)
         # - Body to End-of-arm
-        denominator = np.sqrt(p1_b[0] ** 2 + p1_b[1] ** 2)
+        denominator = np.sqrt(self.tran_c_1[0] ** 2 + self.tran_c_1[1] ** 2)
         rot_be1 = np.array(
-            [[p1_b[0] / denominator, -p1_b[1] / denominator, 0], [p1_b[1] / denominator, p1_b[0] / denominator, 0],
+            [[self.tran_c_1[0] / denominator, -self.tran_c_1[1] / denominator, 0], [self.tran_c_1[1] / denominator, self.tran_c_1[0] / denominator, 0],
              [0, 0, 1]])
 
-        denominator = np.sqrt(p2_b[0] ** 2 + p2_b[1] ** 2)
+        denominator = np.sqrt(self.tran_c_2[0] ** 2 + self.tran_c_2[1] ** 2)
         rot_be2 = np.array(
-            [[p2_b[0] / denominator, -p2_b[1] / denominator, 0], [p2_b[1] / denominator, p2_b[0] / denominator, 0],
+            [[self.tran_c_2[0] / denominator, -self.tran_c_2[1] / denominator, 0], [self.tran_c_2[1] / denominator, self.tran_c_2[0] / denominator, 0],
              [0, 0, 1]])
 
-        denominator = np.sqrt(p3_b[0] ** 2 + p3_b[1] ** 2)
+        denominator = np.sqrt(self.tran_c_3[0] ** 2 + self.tran_c_3[1] ** 2)
         rot_be3 = np.array(
-            [[p3_b[0] / denominator, -p3_b[1] / denominator, 0], [p3_b[1] / denominator, p3_b[0] / denominator, 0],
+            [[self.tran_c_3[0] / denominator, -self.tran_c_3[1] / denominator, 0], [self.tran_c_3[1] / denominator, self.tran_c_3[0] / denominator, 0],
              [0, 0, 1]])
 
-        denominator = np.sqrt(p4_b[0] ** 2 + p4_b[1] ** 2)
+        denominator = np.sqrt(self.tran_c_4[0] ** 2 + self.tran_c_4[1] ** 2)
         rot_be4 = np.array(
-            [[p4_b[0] / denominator, -p4_b[1] / denominator, 0], [p4_b[1] / denominator, p4_b[0] / denominator, 0],
+            [[self.tran_c_4[0] / denominator, -self.tran_c_4[1] / denominator, 0], [self.tran_c_4[1] / denominator, self.tran_c_4[0] / denominator, 0],
              [0, 0, 1]])
 
         # - End-of-arm to Rotor
@@ -364,10 +361,10 @@ class HydrusBase(RecedingHorizonBase):
         ft_r3 = ca.vertcat(0, 0, ft3)
         ft_r4 = ca.vertcat(0, 0, ft4)
 
-        tau_r1 = ca.vertcat(0, 0, -dr1 * ft1 * kq_d_kt)
-        tau_r2 = ca.vertcat(0, 0, -dr2 * ft2 * kq_d_kt)
-        tau_r3 = ca.vertcat(0, 0, -dr3 * ft3 * kq_d_kt)
-        tau_r4 = ca.vertcat(0, 0, -dr4 * ft4 * kq_d_kt)
+        tau_r1 = ca.vertcat(0, 0, -self.dr1 * ft1 * self.kq_d_kt)
+        tau_r2 = ca.vertcat(0, 0, -self.dr2 * ft2 * self.kq_d_kt)
+        tau_r3 = ca.vertcat(0, 0, -self.dr3 * ft3 * self.kq_d_kt)
+        tau_r4 = ca.vertcat(0, 0, -self.dr4 * ft4 * self.kq_d_kt)
 
         # Wrench in Body frame
         fu_b = (
@@ -381,27 +378,46 @@ class HydrusBase(RecedingHorizonBase):
                 + ca.mtimes(rot_be2, ca.mtimes(rot_e2r2, tau_r2))
                 + ca.mtimes(rot_be3, ca.mtimes(rot_e3r3, tau_r3))
                 + ca.mtimes(rot_be4, ca.mtimes(rot_e4r4, tau_r4))
-                + ca.cross(p1_b, ca.mtimes(rot_be1, ca.mtimes(rot_e1r1, ft_r1)))
-                + ca.cross(p2_b, ca.mtimes(rot_be2, ca.mtimes(rot_e2r2, ft_r2)))
-                + ca.cross(p3_b, ca.mtimes(rot_be3, ca.mtimes(rot_e3r3, ft_r3)))
-                + ca.cross(p4_b, ca.mtimes(rot_be4, ca.mtimes(rot_e4r4, ft_r4)))
+                + ca.cross(self.tran_c_1, ca.mtimes(rot_be1, ca.mtimes(rot_e1r1, ft_r1)))
+                + ca.cross(self.tran_c_2, ca.mtimes(rot_be2, ca.mtimes(rot_e2r2, ft_r2)))
+                + ca.cross(self.tran_c_3, ca.mtimes(rot_be3, ca.mtimes(rot_e3r3, ft_r3)))
+                + ca.cross(self.tran_c_4, ca.mtimes(rot_be4, ca.mtimes(rot_e4r4, ft_r4)))
         )
 
-        # Compute Inertia
-        I = ca.diag(ca.vertcat(Ixx, Iyy, Izz))
-        I_inv = ca.diag(ca.vertcat(1 / Ixx, 1 / Iyy, 1 / Izz))
-        g_w = ca.vertcat(0, 0, -gravity)  # World frame
 
+        # Compute Inertia
+        I1 = ca.diag(ca.vertcat(I1xx, I1yy, I1zz))
+        I2 = ca.diag(ca.vertcat(I2xx, I2yy, I2zz))
+        I3 = ca.diag(ca.vertcat(I3xx, I3yy, I3zz))
+        I4 = ca.diag(ca.vertcat(I4xx, I4yy, I4zz))
+        self.I = ca.mtimes(rot_c_1, ca.mtimes(I1, rot_c_1.T)) + ca.mtimes(rot_c_2, ca.mtimes(I2, rot_c_2.T)) + \
+            ca.mtimes(rot_c_3, ca.mtimes(I3, rot_c_3.T)) + ca.mtimes(rot_c_4, ca.mtimes(I4, rot_c_4.T)) + \
+            ca.mtimes(ca.SX.eye(3), ca.mtimes(self.tran_c_1.T, self.tran_c_1)) - ca.mtimes(self.tran_c_1, self.tran_c_1.T) + \
+            ca.mtimes(ca.SX.eye(3), ca.mtimes(self.tran_c_2.T, self.tran_c_2)) - ca.mtimes(self.tran_c_2, self.tran_c_2.T) + \
+            ca.mtimes(ca.SX.eye(3), ca.mtimes(self.tran_c_3.T, self.tran_c_3)) - ca.mtimes(self.tran_c_3, self.tran_c_3.T) + \
+            ca.mtimes(ca.SX.eye(3), ca.mtimes(self.tran_c_4.T, self.tran_c_4)) - ca.mtimes(self.tran_c_4, self.tran_c_4.T)
+
+        I_inv = ca.inv(self.I)
+        g_w = ca.vertcat(0, 0, -gravity)  # World frame
+        
         # Dynamic model (Time-derivative of states)
         ds = ca.vertcat(
             self.v,
-            (ca.mtimes(rot_wb, fu_b) + self.fds_w + self.fdp_w) / mass + g_w,
+            (ca.mtimes(rot_wb, fu_b) + self.fds_w + self.fdp_w) / m + g_w,
             (-self.wx * self.qx - self.wy * self.qy - self.wz * self.qz) / 2,
             (self.wx * self.qw + self.wz * self.qy - self.wy * self.qz) / 2,
             (self.wy * self.qw - self.wz * self.qx + self.wx * self.qz) / 2,
             (self.wz * self.qw + self.wy * self.qx - self.wx * self.qy) / 2,
-            ca.mtimes(I_inv, (-ca.cross(self.w, ca.mtimes(I, self.w)) + tau_u_b + self.tau_ds_b + self.tau_dp_b)),
+            ca.mtimes(I_inv, (-ca.cross(self.w, ca.mtimes(self.I, self.w)) + tau_u_b + self.tau_ds_b + self.tau_dp_b)),
         )
+
+#         f = ca.Function("f", [self.j1s, self.j2s, self.j3s, self.qx, self.qy,self.qz,self.qw,l, m1, m2, m3, m4, m, I1xx, I1yy, I1zz, I2xx, I2yy, I2zz, I3xx, I3yy, I3zz,I4xx, I4yy, I4zz,self.ft1s, self.ft2s,self.ft3s,self.ft4s,gravity], [ds])
+#         result = f(pi/2, pi/2, pi/2, 0,0,0,1,0.6, 0.1, 0.1, 0.1, 0.1, 0.4, 0.001, 0.008, 0.008,0.001, 0.008, 0.008 ,0.001, 0.008, 0.008,0.001, 0.008, 0.008, 1, 1, 1, 1,9.81)
+# # Evaluate the expression
+#         print(result)  
+#         model = AcadosModel()
+
+#         return model
 
         # - Extend model by servo first-order dynamics
         # Assumption if not included: a_c = a_s
@@ -413,7 +429,7 @@ class HydrusBase(RecedingHorizonBase):
         # Or use numerical differentation
         if self.include_servo_model and not self.include_servo_derivative:
             ds = ca.vertcat(ds,
-                            (self.a_c - self.a_s) / t_servo  # Time constant of servo motor
+                            (self.j_c - self.j_s) / t_servo  # Time constant of servo motor
                             )
 
         # - Extend model by thrust first-order dynamics
@@ -446,7 +462,6 @@ class HydrusBase(RecedingHorizonBase):
             lin_acc_w = (ca.mtimes(rot_wb, fu_b) + self.fds_w + self.fdp_w) / mass + g_w
             ang_acc_b = ca.mtimes(I_inv,
                                   (-ca.cross(self.w, ca.mtimes(I, self.w)) + tau_u_b + self.tau_ds_b + self.tau_dp_b))
-
             state_y, state_y_e, control_y = self.get_cost_function(lin_acc_w=lin_acc_w, ang_acc_b=ang_acc_b)
         else:
             state_y, state_y_e, control_y = self.get_cost_function()
@@ -463,6 +478,8 @@ class HydrusBase(RecedingHorizonBase):
         model.cost_y_expr = ca.vertcat(state_y, control_y)  # NONLINEAR_LS
         model.cost_y_expr_e = state_y_e
 
+
+        
         return model
 
     @abstractmethod
@@ -473,6 +490,37 @@ class HydrusBase(RecedingHorizonBase):
     def get_cost_function(self, lin_acc_w=None, ang_acc_b=None):
         pass
 
+    def get_alloc_matrix(self, params, x_now):
+        model = super().get_acados_model()
+        alloc_mat = ca.vertcat(
+            ca.horzcat(1, 1, 1, 1),
+            ca.horzcat(self.tran_c_1[1],  
+                       self.tran_c_2[1],
+                       self.tran_c_3[1],
+                       self.tran_c_4[1]),  
+            ca.horzcat(-self.tran_c_1[0],  
+                       -self.tran_c_2[0],
+                       -self.tran_c_3[0],
+                       -self.tran_c_4[0]),  
+            ca.horzcat(-self.dr1 * self.kq_d_kt,   
+                       -self.dr2 * self.kq_d_kt,
+                       -self.dr3 * self.kq_d_kt,
+                       -self.dr4 * self.kq_d_kt),
+        )
+        alloc_fun = ca.Function('alloc_fun', [model.p[4:30], model.x], [alloc_mat])
+        return np.matrix(alloc_fun(params, x_now).full())
+
+    def get_c_vector(self, params, x_now):
+        model = super().get_acados_model()
+        c_vector = ca.cross(self.w, ca.mtimes(self.I, self.w))
+        c_vector_fun = ca.Function('c_vector_fun', [model.p[4:30], model.x], [c_vector])
+        return np.squeeze(np.array(c_vector_fun(params, x_now).full()))
+    
+    def get_I_matrix(self, params, x_now):
+        model = super().get_acados_model()
+        I_matrix_fun = ca.Function('I_matrix_fun', [model.p[4:30], model.x], [self.I])
+        return np.matrix(I_matrix_fun(params, x_now).full())
+    
     def create_acados_ocp_solver(self) -> AcadosOcpSolver:
         """
         Create generic acados solver for NMPC framework of a quadrotor.
@@ -488,7 +536,6 @@ class HydrusBase(RecedingHorizonBase):
 
         # Get weights from parametrization child file
         Q, R = self.get_weights()
-
         # Cost function options
         # see https://docs.acados.org/python_interface/#acados_template.acados_ocp_cost.AcadosOcpCost for details
         ocp.cost.cost_type = "NONLINEAR_LS"
@@ -671,18 +718,18 @@ class HydrusBase(RecedingHorizonBase):
             elif self.include_thrust_model:
                 x_ref[13:17] = self.phys.mass * self.phys.gravity / 4  # ft1s, ft2s, ft3s, ft4s
         else:
-            x_ref[13:17] = self.phys.mass * self.phys.gravity / 4  # ft1s, ft2s, ft3s, ft4s
+            x_ref[13:17] = self.phys.m * self.phys.gravity / 4  # ft1s, ft2s, ft3s, ft4s
 
         u_ref = np.zeros(nu)
         # Obeserved to be worse than zero!
-        u_ref[0:4] = self.phys.mass * self.phys.gravity / 4  # ft1c, ft2c, ft3c, ft4c
+        u_ref[0:4] = self.phys.m * self.phys.gravity / 4  # ft1c, ft2c, ft3c, ft4c
 
         # same order: phy_params = ca.vertcat(mass, gravity, inertia, kq_d_kt, dr, p1_b, p2_b, p3_b, p4_b, t_rotor, t_servo)
         self.acados_init_p = np.zeros(n_param)
         self.acados_init_p[0] = x_ref[6]  # qw
-        if len(self.phys.physical_param_list) != 24:
-            raise ValueError("Physical parameters are not in the correct order. Please check the physical model.")
-        self.acados_init_p[4:28] = np.array(self.phys.physical_param_list)
+        # if len(self.phys.physical_param_list) != 24:
+        #     raise ValueError("Physical parameters are not in the correct order. Please check the physical model.")
+        self.acados_init_p[4:30] = np.array(self.phys.physical_param_list)
 
         ocp.constraints.x0 = x_ref
         ocp.cost.yref = np.concatenate((x_ref, u_ref))
@@ -713,12 +760,12 @@ class HydrusBase(RecedingHorizonBase):
     def get_reference(self):
         pass
 
-    def _create_reference_generator(self) -> QDNMPCReferenceGenerator:
+    def _create_reference_generator(self) -> HydrusReferenceGenerator:
         # Pass the model's and robot's properties to the reference generator
-        return QDNMPCReferenceGenerator(self,
-                                        self.phys.p1_b, self.phys.p2_b, self.phys.p3_b, self.phys.p4_b,
+        return HydrusReferenceGenerator(self,
+                                        self.tran_c_1, self.tran_c_2, self.tran_c_3, self.tran_c_4,
                                         self.phys.dr1, self.phys.dr2, self.phys.dr3, self.phys.dr4,
-                                        self.phys.kq_d_kt, self.phys.mass, self.phys.gravity)
+                                        self.phys.kq_d_kt, self.phys.m, self.phys.gravity)
 
     def create_acados_sim_solver(self, ts_sim: float, is_build: bool = True) -> AcadosSimSolver:
         ocp_model = super().get_acados_model()
@@ -726,12 +773,15 @@ class HydrusBase(RecedingHorizonBase):
         acados_sim = AcadosSim()
         acados_sim.model = ocp_model
 
+
+        n_u = ocp_model.u.size()[0]  # 获取控制输入的维度
         n_param = ocp_model.p.size()[0]
         # same order: phy_params = ca.vertcat(mass, gravity, inertia, kq_d_kt, dr, p1_b, p2_b, p3_b, p4_b, t_rotor, t_servo)
         self.acados_init_p = np.zeros(n_param)
         self.acados_init_p[0] = 1.0  # qw
-        self.acados_init_p[4:28] = np.array(self.phys.physical_param_list)
+        self.acados_init_p[4:30] = np.array(self.phys.physical_param_list)
         acados_sim.parameter_values = self.acados_init_p
+   
 
         acados_sim.solver_options.T = ts_sim
         return AcadosSimSolver(acados_sim, json_file=ocp_model.name + "_acados_sim.json", build=is_build)

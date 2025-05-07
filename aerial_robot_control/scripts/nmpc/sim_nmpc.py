@@ -48,7 +48,6 @@ from tilt_tri.tilt_tri_servo_dist import NMPCTiltTriServoDist
 def main(args):
     # ========== Init ==========
     # ---------- Controller ----------
-    print("aaa")
     if args.arch == 'qd':
 
         if args.model == 0:
@@ -102,14 +101,12 @@ def main(args):
 
     else:
         raise ValueError(f"Invalid robot architecture {args.arch}.")
-    print("bbb")
     # Get time constants
     if nmpc.include_servo_model:
         t_servo_ctrl = nmpc.phys.t_servo
     else:
         t_servo_ctrl = 0.0
     ts_ctrl = nmpc.params["T_samp"]
-    print("ccc")
     # OCP solver
     ocp_solver = nmpc.get_ocp_solver()
     nx = ocp_solver.acados_ocp.dims.nx
@@ -126,8 +123,6 @@ def main(args):
         ocp_solver.set(stage, "u", u_init)
     x_history = []
     u_history = []
-
-    return np.array(x_history), np.array(u_history)
 
     # ---------- Simulator ----------
     if args.arch == 'qd':
