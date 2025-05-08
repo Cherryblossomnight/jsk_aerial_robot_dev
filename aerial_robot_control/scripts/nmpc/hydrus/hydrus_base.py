@@ -521,6 +521,42 @@ class HydrusBase(RecedingHorizonBase):
         I_matrix_fun = ca.Function('I_matrix_fun', [model.p[4:30], model.x], [self.I])
         return np.matrix(I_matrix_fun(params, x_now).full())
     
+    # def calculate_constaints(sel, nx, nu, lbu, ubu):
+    #     """
+    #     Use OcpSolver to create constraints for the quadrotor model.
+    #     """
+    #     # Construct OCP
+    #     ocp = AcadosOcp()
+    #     ocp.model = model
+    #     ocp.dims.N = 1     
+    #     ocp.dims.nx = nx
+    #     ocp.dims.nu = nu
+    #     ocp.dims.ny = 4
+    #     ocp.dims.ny_e = 0
+    #     ocp.cost.cost_type = "LINEAR_LS"
+    #     ocp.cost.cost_type_e = "LINEAR_LS"
+    #     ocp.cost.Vu = np.eye(nu)
+    #     ocp.cost.yref = np.zeros(4)     # 你运行时设置为 u_ref
+    #     ocp.cost.W = np.eye(4)
+    #     ocp.constraints.idxbu = np.array([0, 1, 2, 3])
+    #     ocp.constraints.lbu = np.array([-1, -1, -1, 0])  # 示例下界
+    #     ocp.constraints.ubu = np.array([1, 1, 1, 10])    # 示例上界
+    #     ocp.constraints.x0 = np.array([0])              # dummy
+
+    #     ocp.solver_options.qp_solver = "FULL_CONDENSING_QPOASES"
+    #     ocp.solver_options.nlp_solver_type = "SQP"
+    #     ocp.solver_options.hessian_approx = "GAUSS_NEWTON"
+    #     ocp.solver_options.integrator_type = "ERK"
+    #     ocp.solver_options.tf = 0.01
+
+    #     solver = AcadosOcpSolver(ocp, json_file="projection_ocp.json")
+
+    #     u_ref = np.array([0.5, 0.2, -0.3, 8.0])
+    #     solver.set(0, "yref", u_ref)
+    #     solver.solve()
+    #     u_proj = solver.get(0, "u")
+    #     print(u_proj)
+
     def create_acados_ocp_solver(self) -> AcadosOcpSolver:
         """
         Create generic acados solver for NMPC framework of a quadrotor.
@@ -755,6 +791,55 @@ class HydrusBase(RecedingHorizonBase):
         print("Generated C code for acados solver successfully to " + os.getcwd())
 
         return solver
+    # def create_acados_mhe_ocp_solver(self):
+    #     # Create OCP object and set basic properties
+    #     ocp = super().get_ocp()
+        
+    #     # Model dimensions
+    #     nx = ocp.model.x.size()[0]; nw = ocp.model.u.size()[0]
+    #     n_meas = ocp.model.cost_y_expr.size()[0] - nw
+        
+    #     # Get weights from parametrization child file
+    #     Q_R, R_Q, Q_P = self.get_weights()
+
+    #     # Cost function options
+    #     ocp.cost.cost_type_0 = "NONLINEAR_LS"
+    #     ocp.cost.cost_type = "NONLINEAR_LS"
+    #     ocp.cost.cost_type_e = "NONLINEAR_LS"
+    #     # Concatenate to create diagonal matrix: W_0 = diag(Q_R, R_Q, Q_P)
+    #     W = np.block([[Q_R, np.zeros((n_meas, nw))], [np.zeros((nw, n_meas)), R_Q]])
+    #     ocp.cost.W_0 = np.block([[W, np.zeros((n_meas + nw, nx))], [np.zeros((nx, n_meas + nw)), Q_P]])
+    #     ocp.cost.W = W
+    #     ocp.cost.W_e = Q_R      # Weight matrix at terminal shooting node (N)
+    #     print("W_0: \n", ocp.cost.W_0)
+    #     print("W: \n", ocp.cost.W)
+    #     print("W_e: \n", ocp.cost.W_e)
+
+    #     # Note: no constraints set
+
+    #     # Reference
+    #     ocp.cost.yref_0 = np.zeros(n_meas + nw + nx)
+    #     ocp.cost.yref = np.zeros(n_meas + nw)
+    #     ocp.cost.yref_e = np.zeros(n_meas)
+
+    #     # Solver options
+    #     ocp.solver_options.qp_solver = "PARTIAL_CONDENSING_HPIPM"
+    #     ocp.solver_options.hpipm_mode = "BALANCE"  # "BALANCE", "SPEED_ABS", "SPEED", "ROBUST". Default: "BALANCE".
+    #     # Start up flags:       [Seems only works for FULL_CONDENSING_QPOASES]
+    #     # 0: no warm start; 1: warm start; 2: hot start. Default: 0
+    #     # ocp.solver_options.qp_solver_warm_start = 1
+    #     ocp.solver_options.hessian_approx = "GAUSS_NEWTON"
+    #     ocp.solver_options.integrator_type = "ERK"  # explicit Runge-Kutta integrator
+    #     ocp.solver_options.print_level = 0
+    #     ocp.solver_options.nlp_solver_type = "SQP_RTI"
+    #     ocp.solver_options.qp_solver_cond_N = self.params["N_steps"]
+    #     ocp.solver_options.tf = self.params["T_horizon"]
+
+    #     # Build acados ocp into current working directory (which was created in super class)
+    #     json_file_path = os.path.join("./" + ocp.model.name + "_acados_ocp.json")
+    #     solver = AcadosOcpSolver(ocp, json_file=json_file_path, build=True)
+    #     print("Generated C code for acados solver successfully to " + os.getcwd())
+    #     return solver
 
     @abstractmethod
     def get_reference(self):
@@ -781,6 +866,7 @@ class HydrusBase(RecedingHorizonBase):
         self.acados_init_p[0] = 1.0  # qw
         self.acados_init_p[4:30] = np.array(self.phys.physical_param_list)
         acados_sim.parameter_values = self.acados_init_p
+    
    
 
         acados_sim.solver_options.T = ts_sim

@@ -106,7 +106,66 @@ class HydrusThrust(HydrusBase):
         print("R: \n", R)
 
         return Q, R
-    
+       
+        # def get_weights(self):
+        # # Weights
+        # Q_R = np.diag(
+        #     [
+        #         1 / (self.params["R_a"] ** 2),
+        #         1 / (self.params["R_a"] ** 2),
+        #         1 / (self.params["R_a"] ** 2),
+        #         1 / (self.params["R_omega"] ** 2),
+        #         1 / (self.params["R_omega"] ** 2),
+        #         1 / (self.params["R_omega"] ** 2),
+        #         1 / (self.params["R_alpha"] ** 2),
+        #         1 / (self.params["R_alpha"] ** 2),
+        #         1 / (self.params["R_alpha"] ** 2),
+        #         1 / (self.params["R_alpha"] ** 2),
+        #         1 / (self.params["R_ft"] ** 2),
+        #         1 / (self.params["R_ft"] ** 2),
+        #         1 / (self.params["R_ft"] ** 2),
+        #         1 / (self.params["R_ft"] ** 2),
+        #     ]
+        # )
+        # print("Q_R: \n", Q_R)
+
+        # R_Q = np.diag(
+        #     [
+        #         self.params["Q_w_f"],
+        #         self.params["Q_w_f"],
+        #         self.params["Q_w_f"],
+        #         self.params["Q_w_tau"],
+        #         self.params["Q_w_tau"],
+        #         self.params["Q_w_tau"],
+        #     ]
+        # )
+        # print("R_Q: \n", R_Q)
+
+        # Q_P = np.diag(
+        #     [
+        #         self.params["P_omega"],
+        #         self.params["P_omega"],
+        #         self.params["P_omega"],
+        #         self.params["P_f_d"],
+        #         self.params["P_f_d"],
+        #         self.params["P_f_d"],
+        #         self.params["P_tau_d"],
+        #         self.params["P_tau_d"],
+        #         self.params["P_tau_d"],
+        #         self.params["P_alpha"],
+        #         self.params["P_alpha"],
+        #         self.params["P_alpha"],
+        #         self.params["P_alpha"],
+        #         self.params["P_ft"],
+        #         self.params["P_ft"],
+        #         self.params["P_ft"],
+        #         self.params["P_ft"],
+        #     ]
+        # )
+        # print("Q_P: \n", Q_P)
+
+        # return Q_R, R_Q, Q_P
+
     def get_reference(self, target_xyz, target_qwxyz):
         """
         Assemble reference trajectory from target pose and reference control values.

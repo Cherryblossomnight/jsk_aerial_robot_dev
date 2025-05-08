@@ -174,8 +174,8 @@ class Visualizer:
         plt.plot(time_data_x, euler[:self.data_idx, 1], 'lime', label="pitch")
         plt.plot(time_data_x, euler[:self.data_idx, 2], 'gray', label="yaw")
         if self.is_reference:
-            # plt.plot(time_data_x, r_sim_all[:self.data_idx, 3], color='gold', linestyle='--', label="rollr")
-            # plt.plot(time_data_x, r_sim_all[:self.data_idx, 4], color='lime', linestyle='--', label="pitchr")
+            plt.plot(time_data_x, r_sim_all[:self.data_idx, 3], color='gold', linestyle='--', label="rollr")
+            plt.plot(time_data_x, r_sim_all[:self.data_idx, 4], color='lime', linestyle='--', label="pitchr")
             plt.plot(time_data_x, r_sim_all[:self.data_idx, 5], color='gray', linestyle='--', label="yawr")
         plt.legend(framealpha=legend_alpha)
         # plt.xlabel("Time (s)")

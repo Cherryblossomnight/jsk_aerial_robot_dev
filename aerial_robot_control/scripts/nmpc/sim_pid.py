@@ -187,6 +187,7 @@ def main(args):
     # State Initialization
     x_init_sim = np.zeros(nx_sim)
     x_init_sim[6] = 1.0  # qw
+    x_init_sim[13:16] = [np.pi/2, np.pi/2, np.pi/2]   # joint angles state
     # ---------- Reference ----------
     reference_generator = nmpc.get_reference_generator()
 
@@ -219,10 +220,14 @@ def main(args):
     u_cmd = u_init
     t_ctl = 0.0
     x_now_sim = x_init_sim
+    target_roll = 0
+    target_pitch = 0
     for i in range(N_sim):
         # --------- Update time ---------
         t_now = i * ts_sim
         t_ctl += ts_sim
+        # --------- Add state constaints ---------
+       
 
         # --------- Update state estimation ---------
         # Assemble state from simulation and disturbance estimation 
@@ -243,23 +248,25 @@ def main(args):
                 x_now[13:17] = deepcopy(x_now_sim[17:21])
 
         # -------- Update control target --------
-        target_xyz = np.array([[0.3, 0.6, 1.0]]).T
+        target_xyz = np.array([[0.0, 0.0, 2.0]]).T
         target_rpy = np.array([[0.0, 0.0, 0.0]]).T
 
         if args.plot_type == 2:
-            target_xyz = np.array([[0.0, 0.0, 0.0]]).T
-            target_rpy = np.array([[0.0, 0.0, 0.5]]).T
+            target_xyz = np.array([[0.0, 0.0, 2.0]]).T
+            target_rpy = np.array([[0.0, 0.0, 0.0]]).T
 
         if t_total_sim > 2.0:
-            if 2.0 <= t_now < 6:
-                target_xyz = np.array([[0.3, 0.6, 2.0]]).T
+            if 2.0 <= t_now :
+                target_xyz = np.array([[0.0, 0.0, 2.0]]).T
 
                 roll = 30.0 / 180.0 * np.pi
                 pitch = 60.0 / 180.0 * np.pi
                 yaw = 30.0 / 180.0 * np.pi
+            if t_now >= 4:
+                target_xyz = np.array([[1.0, 0.0, 2.0]]).T
                 target_rpy = np.array([[roll, pitch, 0.0]]).T
-                
-
+                x_now_sim[16:22] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+                # u_cmd[4:7] = [np.pi/2, 0, 0] 
             # if 3.0 <= t_now < 5.5:
             #     assert t_sqp_end <= 3.0
             #     target_xyz = np.array([[1.0, 1.0, 1.0]]).T
@@ -274,16 +281,16 @@ def main(args):
 
             if t_now >= 6:
                 assert t_sqp_end <= 3.0
-                target_xyz = np.array([[0.3, 0.6, 2.0]]).T
+                target_xyz = np.array([[1.0, 0.0, 2.0]]).T
                 target_rpy = np.array([[0.0, 0.0, 0.0]]).T
-                x_now_sim[16:22] = [0.0, 0.0, 6.0, 0.0, 0.0, 0.0]  # joint angles state
+                x_now_sim[16:22] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # joint angles state
+            # if t_now >= 8:
+            #     x_now_sim[16:22] = [0.0, 3.0, 0.0, 0.0, 0.0, 0.0]
             if t_now >= 8:
-                x_now_sim[16:22] = [0.0, 3.0, 0.0, 0.0, 0.0, 0.0]
+                 # joint angles command
+                x_now_sim[16:22] = [-2.0, 0.0, 0.0, 0.0, 0.0, 0.0]
             if t_now >= 10:
-                u_cmd[4:7] = [np.pi/2, 0, 0]  # joint angles command
-                x_now_sim[16:22] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.3]
-            if t_now >= 14:
-                x_now_sim[16:22] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+                x_now_sim[16:22] = [-2.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         # Compute reference trajectory from target pose
         xr, ur = reference_generator.compute_trajectory(target_xyz, target_rpy)
 
@@ -315,8 +322,8 @@ def main(args):
         #     roll, pitch, yaw = euler_from_quaternion(quat)
         #     x_acc = 1.0*(target_xyz[0,0]-x_now[0]) + 1.6*(0.0-x_now[3])
         #     y_acc = 1.0*(target_xyz[1,0]-x_now[1]) + 1.6*(0.0-x_now[4])
-        #     target_roll = -y_acc / 9.798
-        #     target_pitch = x_acc / 9.798
+        #     target_roll = -y_acc*np.cos(yaw) + x_acc*np.sin(yaw) / 9.798
+        #     target_pitch = y_acc*np.sin(yaw) + x_acc*np.cos(yaw) / 9.798
         #     roll_acc = 9.0*(target_roll-roll) + 5.0*(0.0-x_now[10])
         #     pitch_acc = 9.0*(target_pitch-pitch) + 5.0*(0.0-x_now[11])
         #     yaw_acc = 9.0*(target_rpy[2,0]-yaw) + 6.0*(0.0-x_now[12])
@@ -325,40 +332,54 @@ def main(args):
         #     delta_u = np.linalg.pinv(mat) @ np.array([z_acc, roll_acc, pitch_acc, yaw_acc])
         #     u_cmd[0:4] = np.squeeze(np.asarray(delta_u)) 
         # -------- Impedance Controller --------
+        
         if t_ctl >= ts_ctrl:
             t_ctl = 0.0
-            z_acc = 24.0*(target_xyz[2,0]-x_now[2])+10.0*(0.0-x_now[5]) + 9.798*3.4
+            m = 3.4
+            md = 5.0
+
+            x_acc = (1/md - 1/m) * x_now_sim[16] + 1.0*(target_xyz[0,0]-x_now[0]) + 1.6*(0.0-x_now[3])
+            y_acc = (1/md - 1/m) * x_now_sim[17] + 1.0*(target_xyz[1,0]-x_now[1]) + 1.6*(0.0-x_now[4])
+            z_acc = (1/md - 1/m) * x_now_sim[18] + 8.0*(target_xyz[2,0]-x_now[2]) + 5.0*(0.0-x_now[5]) + 9.798
+            if t_now < 2.0:
+                z_acc = z_acc * i / 400
+
             quat = [x_now[7], x_now[8], x_now[9], x_now[6]]
             roll, pitch, yaw = euler_from_quaternion(quat)
-            x_acc = 1.0*(target_xyz[0,0]-x_now[0]) + 1.6*(0.0-x_now[3])
-            y_acc = 1.0*(target_xyz[1,0]-x_now[1]) + 1.6*(0.0-x_now[4])
-            target_roll = -y_acc / 9.798
-            target_pitch = x_acc / 9.798
-            target_rpy[0,0] = target_roll   
-            target_rpy[1,0] = target_pitch
+            target_roll = (-y_acc*np.cos(yaw) + x_acc*np.sin(yaw)) / 9.798
+            target_pitch = (y_acc*np.sin(yaw) + x_acc*np.cos(yaw)) / 9.798
             I = nmpc.get_I_matrix(nmpc.acados_init_p[4:30], x_now)
-            I_d = np.matrix([[0.2, 0.0, 0.0],
-                            [0.0, 0.2, 0.0],
-                            [0.0, 0.0, 0.4]])
-            Kp = np.matrix([[9.0, 0.0, 0.0],
-                            [0.0, 9.0, 0.0],
-                            [0.0, 0.0, 9.0]])
-            Kd = np.matrix([[5.0, 0.0, 0.0],
-                            [0.0, 5.0, 0.0],
-                            [0.0, 0.0, 6.0]])
+            I_d = np.matrix([[2, 0.0, 0.0],
+                             [0.0, 2, 0.0],
+                             [0.0, 0.0, 4]])
+            I_d = I
+            Kp = np.matrix([[12.0, 0.0, 0.0],
+                            [0.0, 12.0, 0.0],
+                            [0.0, 0.0, 3.0]])
+            Kd = np.matrix([[7.0, 0.0, 0.0],
+                            [0.0, 7.0, 0.0],
+                            [0.0, 0.0, 2.0]])
             delta_x = np.array([target_roll-roll, target_pitch-pitch, target_rpy[2,0]-yaw])
             delta_v = np.array([0.0-x_now[10], 0.0-x_now[11], 0.0-x_now[12]])
     
             c_vector = nmpc.get_c_vector(nmpc.acados_init_p[4:30], x_now)
-            euler_acc = ((I * I_d.I - np.eye(3)) @ x_now[19:22]).reshape(3, 1) + I*I_d.I*(Kp @ delta_x + Kd @ delta_v).reshape(3, 1) + c_vector.reshape(3, 1)
-            euler_acc = np.squeeze(np.asarray(euler_acc)) 
+            torque = ((I * I_d.I - np.eye(3)) @ x_now_sim[19:22]).reshape(3, 1) + (Kp @ delta_x + Kd @ delta_v).reshape(3, 1) 
+            # print((I * I_d.I - np.eye(3)) @ x_now_sim[19:22])
+            # print((Kp @ delta_x + Kd @ delta_v))
+            # print("aa")
+            torque = np.squeeze(np.asarray(torque)) 
             mat = nmpc.get_alloc_matrix(nmpc.acados_init_p[4:30], x_now)
            
-            delta_u = np.linalg.pinv(mat) @ np.array([z_acc, euler_acc[0], euler_acc[1], euler_acc[2]])
+            delta_u = np.linalg.pinv(mat) @ np.array([z_acc*m, torque[0], torque[1], torque[2]])
+            # print("target_roll: ", target_roll)
+            # print("target_pitch: ", target_pitch)
+            # print("euler_acc: ", euler_acc)
+            # print("delta_u: ", delta_u)
+            # print("mat: ", np.linalg.pinv(mat))
             u_cmd[0:4] = np.squeeze(np.asarray(delta_u)) 
 
         # --------- Update simulation ----------
-
+      
         sim_solver.set("x", x_now_sim)
         sim_solver.set("u", u_cmd)
 
@@ -367,11 +388,21 @@ def main(args):
             raise Exception(f"acados integrator returned status {status} in closed loop instance {i}")
 
         x_now_sim = sim_solver.get("x")
+        # --------- Add state constaints ----------
+        if x_now_sim[5] < 0.0:
+            if x_now_sim[2] <= 0.0:
+                x_now_sim[2] = 0.0
+                x_now_sim[5] = 0.0
+        if x_now_sim[3] > 0.0:
+            if x_now_sim[0] >= 0.8:
+                x_now_sim[0] = 0.8
+                x_now_sim[3] = 0.0
+
 
         # Save current simulation data for later comparison
         x_history.append(x_now_sim.copy())
         u_history.append(u_cmd.copy())
-        r_now = [target_xyz[0,0], target_xyz[1,0], target_xyz[2,0], target_rpy[0,0], target_rpy[1,0], target_rpy[2,0], u_cmd[4], u_cmd[5], u_cmd[6]]
+        r_now = [target_xyz[0,0], target_xyz[1,0], target_xyz[2,0], target_roll, target_pitch, target_rpy[2,0], u_cmd[4], u_cmd[5], u_cmd[6]]
         # --------- Update visualizer ----------
         viz.update(i, x_now_sim, r_now, u_cmd)  # Note: The recording frequency of u_cmd is the same as ts_sim
 
