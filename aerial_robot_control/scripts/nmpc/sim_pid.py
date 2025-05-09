@@ -4,6 +4,7 @@ import time
 import numpy as np
 import argparse
 from tf.transformations import euler_from_quaternion
+from tf.transformations import quaternion_matrix
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_bi")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_tri")
@@ -182,8 +183,8 @@ def main(args):
     # Sim solver
     sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, is_build=True)
     nx_sim = sim_solver.acados_sim.dims.nx
-    nr = 9
-    r_init = [0.3, 0.6, 1.0, 0.0, 0.0, 0.0, np.pi/2, np.pi/2, np.pi/2]
+    nr = 15
+    r_init = [0.3, 0.6, 1.0, 0.0, 0.0, 0.0, np.pi/2, np.pi/2, np.pi/2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     # State Initialization
     x_init_sim = np.zeros(nx_sim)
     x_init_sim[6] = 1.0  # qw
@@ -222,6 +223,12 @@ def main(args):
     x_now_sim = x_init_sim
     target_roll = 0
     target_pitch = 0
+    external_wrench_I_term = np.zeros(6)
+    est_external_wrench = np.zeros(6)
+    est_external_wrench_plt = np.zeros(6)
+    init_sum_momentum = np.zeros(6)
+    take_off = False
+    take_off_i = 0
     for i in range(N_sim):
         # --------- Update time ---------
         t_now = i * ts_sim
@@ -263,9 +270,9 @@ def main(args):
                 pitch = 60.0 / 180.0 * np.pi
                 yaw = 30.0 / 180.0 * np.pi
             if t_now >= 4:
-                target_xyz = np.array([[1.0, 0.0, 2.0]]).T
+                target_xyz = np.array([[0.0, 0.0, 2.0]]).T
                 target_rpy = np.array([[roll, pitch, 0.0]]).T
-                x_now_sim[16:22] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+               # x_now_sim[16:22] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
                 # u_cmd[4:7] = [np.pi/2, 0, 0] 
             # if 3.0 <= t_now < 5.5:
             #     assert t_sqp_end <= 3.0
@@ -281,16 +288,17 @@ def main(args):
 
             if t_now >= 6:
                 assert t_sqp_end <= 3.0
-                target_xyz = np.array([[1.0, 0.0, 2.0]]).T
+                target_xyz = np.array([[0.0, 0.0, 2.0]]).T
                 target_rpy = np.array([[0.0, 0.0, 0.0]]).T
-                x_now_sim[16:22] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # joint angles state
-            # if t_now >= 8:
-            #     x_now_sim[16:22] = [0.0, 3.0, 0.0, 0.0, 0.0, 0.0]
+                x_now_sim[16:22] = [0.0, 3.0, 3.0, 0.0, 0.0, 0.0]
+                #x_now_sim[16:22] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # joint angles state
             if t_now >= 8:
-                 # joint angles command
-                x_now_sim[16:22] = [-2.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+                x_now_sim[16:22] = [0.0, 3.0, 3.0, 0.0, 0.0, 0.0]
+            # if t_now >= 8:
+            #      # joint angles command
+            #     x_now_sim[16:22] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
             if t_now >= 10:
-                x_now_sim[16:22] = [-2.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+                x_now_sim[16:22] = [0.0, 3.0, 3.0, 0.0, 0.0, 0.0]
         # Compute reference trajectory from target pose
         xr, ur = reference_generator.compute_trajectory(target_xyz, target_rpy)
 
@@ -337,15 +345,25 @@ def main(args):
             t_ctl = 0.0
             m = 3.4
             md = 5.0
-
-            x_acc = (1/md - 1/m) * x_now_sim[16] + 1.0*(target_xyz[0,0]-x_now[0]) + 1.6*(0.0-x_now[3])
-            y_acc = (1/md - 1/m) * x_now_sim[17] + 1.0*(target_xyz[1,0]-x_now[1]) + 1.6*(0.0-x_now[4])
+            # calcaluate the translation acceleration
+            x_acc = (1/md - 1/m) * x_now_sim[16] + 2.0*(target_xyz[0,0]-x_now[0]) + 5.0*(0.0-x_now[3])
+            y_acc = (1/md - 1/m) * x_now_sim[17] + 2.0*(target_xyz[1,0]-x_now[1]) + 5.0*(0.0-x_now[4])
             z_acc = (1/md - 1/m) * x_now_sim[18] + 8.0*(target_xyz[2,0]-x_now[2]) + 5.0*(0.0-x_now[5]) + 9.798
-            if t_now < 2.0:
-                z_acc = z_acc * i / 400
-
+            # x_acc = 1.0*(target_xyz[0,0]-x_now[0]) + 1.6*(0.0-x_now[3])
+            # y_acc = 1.0*(target_xyz[1,0]-x_now[1]) + 1.6*(0.0-x_now[4])
+            # z_acc = 8.0*(target_xyz[2,0]-x_now[2]) + 5.0*(0.0-x_now[5]) + 9.798
+            
+            if target_xyz[2,0] > 0 and take_off == False:
+                take_off = True
+                take_off_i = i
+            if take_off == False:
+                z_acc = 0.0
+            else:
+                if i - take_off_i < 400:
+                    z_acc = z_acc * (i - take_off_i) / 400
             quat = [x_now[7], x_now[8], x_now[9], x_now[6]]
             roll, pitch, yaw = euler_from_quaternion(quat)
+            rot_cog = quaternion_matrix(quat)[:3, :3]
             target_roll = (-y_acc*np.cos(yaw) + x_acc*np.sin(yaw)) / 9.798
             target_pitch = (y_acc*np.sin(yaw) + x_acc*np.cos(yaw)) / 9.798
             I = nmpc.get_I_matrix(nmpc.acados_init_p[4:30], x_now)
@@ -359,17 +377,34 @@ def main(args):
             Kd = np.matrix([[7.0, 0.0, 0.0],
                             [0.0, 7.0, 0.0],
                             [0.0, 0.0, 2.0]])
+            ko = np.matrix(np.diag([6.0, 6.0, 6.0, 4.5, 4.5, 4.5]))
             delta_x = np.array([target_roll-roll, target_pitch-pitch, target_rpy[2,0]-yaw])
             delta_v = np.array([0.0-x_now[10], 0.0-x_now[11], 0.0-x_now[12]])
     
             c_vector = nmpc.get_c_vector(nmpc.acados_init_p[4:30], x_now)
+            # calcaluate the command torque
             torque = ((I * I_d.I - np.eye(3)) @ x_now_sim[19:22]).reshape(3, 1) + (Kp @ delta_x + Kd @ delta_v).reshape(3, 1) 
+            #torque = (Kp @ delta_x + Kd @ delta_v).reshape(3, 1) 
             # print((I * I_d.I - np.eye(3)) @ x_now_sim[19:22])
             # print((Kp @ delta_x + Kd @ delta_v))
             # print("aa")
             torque = np.squeeze(np.asarray(torque)) 
+            torque_w = rot_cog @ torque
+            sum_momentum, N = nmpc.get_comp_of_external_wrench(nmpc.acados_init_p[4:30], x_now)
+            # # When drone is on the ground, the N_vector(Gravity and Coriolis force) should be zero.
+            # # Now, the dynamic equation is Mv_cot + Cv + g = tao_ext + tao_cmd + N, Here N is the support force.
+            # # So, the N_vector now is (Cv+g-N) = 0)
+          
+            target_wrench = np.array([x_acc*m, y_acc*m, z_acc*m, torque_w[0], torque_w[1], torque_w[2]])
+            external_wrench_I_term += (target_wrench - N + est_external_wrench) * ts_ctrl
+            est_external_wrench = np.squeeze(np.asarray(ko @ (sum_momentum-external_wrench_I_term)))
+            # When the drone is on the ground, ignore the support force.
+            est_external_wrench_plt = est_external_wrench.copy()
+            if i < 200 * 4:
+                est_external_wrench_plt[2] = 0.0
+            # print("target_wrench: ", target_wrench) 
+            # print("est_external_wrench: ", est_external_wrench)
             mat = nmpc.get_alloc_matrix(nmpc.acados_init_p[4:30], x_now)
-           
             delta_u = np.linalg.pinv(mat) @ np.array([z_acc*m, torque[0], torque[1], torque[2]])
             # print("target_roll: ", target_roll)
             # print("target_pitch: ", target_pitch)
@@ -393,16 +428,16 @@ def main(args):
             if x_now_sim[2] <= 0.0:
                 x_now_sim[2] = 0.0
                 x_now_sim[5] = 0.0
-        if x_now_sim[3] > 0.0:
-            if x_now_sim[0] >= 0.8:
-                x_now_sim[0] = 0.8
-                x_now_sim[3] = 0.0
+        # if x_now_sim[3] > 0.0:
+        #     if x_now_sim[0] >= 0.8:
+        #         x_now_sim[0] = 0.8
+        #         x_now_sim[3] = 0.0
 
 
         # Save current simulation data for later comparison
         x_history.append(x_now_sim.copy())
         u_history.append(u_cmd.copy())
-        r_now = [target_xyz[0,0], target_xyz[1,0], target_xyz[2,0], target_roll, target_pitch, target_rpy[2,0], u_cmd[4], u_cmd[5], u_cmd[6]]
+        r_now = [target_xyz[0,0], target_xyz[1,0], target_xyz[2,0], target_roll, target_pitch, target_rpy[2,0], u_cmd[4], u_cmd[5], u_cmd[6], est_external_wrench_plt[0], est_external_wrench_plt[1], est_external_wrench_plt[2], est_external_wrench_plt[3], est_external_wrench_plt[4], est_external_wrench_plt[5]]
         # --------- Update visualizer ----------
         viz.update(i, x_now_sim, r_now, u_cmd)  # Note: The recording frequency of u_cmd is the same as ts_sim
 

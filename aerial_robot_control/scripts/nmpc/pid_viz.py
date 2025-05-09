@@ -51,6 +51,7 @@ class Visualizer:
 
         self.x_sim_all[0, :] = x0
         self.r_sim_all[0, :] = r0
+   
         self.comp_time = np.zeros(N_sim)
 
         if self.is_record_diff_u:
@@ -148,18 +149,18 @@ class Visualizer:
             plt.axvspan(t_sqp_start, t_sqp_end, facecolor="orange", alpha=0.2)
 
         # Plot Quaternions
-        plt.subplot(ceil(n_plots/2), 2, 5)
-        plt.plot(time_data_x, x_sim_all[:self.data_idx, 6], label="qw")
-        plt.plot(time_data_x, x_sim_all[:self.data_idx, 7], label="qx")
-        plt.plot(time_data_x, x_sim_all[:self.data_idx, 8], label="qy")
-        plt.plot(time_data_x, x_sim_all[:self.data_idx, 9], label="qz")
-        plt.legend(framealpha=legend_alpha)
-        # plt.xlabel("Time (s)")
-        plt.xlim([0, t_total_sim])
-        plt.ylabel("Quaternion")
-        plt.grid(True)
-        if is_plot_sqp:
-            plt.axvspan(t_sqp_start, t_sqp_end, facecolor="orange", alpha=0.2)
+        # plt.subplot(ceil(n_plots/2), 2, 5)
+        # plt.plot(time_data_x, x_sim_all[:self.data_idx, 6], label="qw")
+        # plt.plot(time_data_x, x_sim_all[:self.data_idx, 7], label="qx")
+        # plt.plot(time_data_x, x_sim_all[:self.data_idx, 8], label="qy")
+        # plt.plot(time_data_x, x_sim_all[:self.data_idx, 9], label="qz")
+        # plt.legend(framealpha=legend_alpha)
+        # # plt.xlabel("Time (s)")
+        # plt.xlim([0, t_total_sim])
+        # plt.ylabel("Quaternion")
+        # plt.grid(True)
+        # if is_plot_sqp:
+        #     plt.axvspan(t_sqp_start, t_sqp_end, facecolor="orange", alpha=0.2)
 
         # Use tf2 to convert x_sim_all[:, 6:10] to euler angle
         euler = np.zeros((x_sim_all.shape[0], 3))
@@ -200,7 +201,7 @@ class Visualizer:
 
         # Plot Joint Angles
         print("Average computation time: ", np.mean(self.comp_time))
-        plt.subplot(ceil(n_plots/2), 2, 6)
+        plt.subplot(ceil(n_plots/2), 2, 5)
         plt.plot(time_data_x, x_sim_all[:self.data_idx, 13], 'c', label="joint1")
         plt.plot(time_data_x, x_sim_all[:self.data_idx, 14], 'm', label="joint2")
         plt.plot(time_data_x, x_sim_all[:self.data_idx, 15], 'y', label="joint3")
@@ -211,7 +212,29 @@ class Visualizer:
         plt.legend(framealpha=legend_alpha)
         plt.xlabel("Time (s)")
         plt.xlim([0, t_total_sim])
-        plt.ylabel("Joint angles (rad)")
+        plt.ylabel("Joint Angles (rad)")
+        plt.grid(True)
+
+        # Plot Estimated Disturbance Force
+        plt.subplot(ceil(n_plots/2), 2, 7)
+        plt.plot(time_data_x, r_sim_all[:self.data_idx, 9], 'c', label="fx_est")
+        plt.plot(time_data_x, r_sim_all[:self.data_idx, 10], 'm', label="fy_est")
+        plt.plot(time_data_x, r_sim_all[:self.data_idx, 11], 'y', label="fz_est")
+        plt.legend(framealpha=legend_alpha)
+        plt.xlabel("Time (s)")
+        plt.xlim([0, t_total_sim])
+        plt.ylabel("Estimated Force (N)")
+        plt.grid(True)
+
+        # Plot Estimated Disturbance Torque
+        plt.subplot(ceil(n_plots/2), 2, 8)
+        plt.plot(time_data_x, r_sim_all[:self.data_idx, 12], 'c', label="tx_ext")
+        plt.plot(time_data_x, r_sim_all[:self.data_idx, 13], 'm', label="ty_ext")
+        plt.plot(time_data_x, r_sim_all[:self.data_idx, 14], 'y', label="tz_ext")
+        plt.legend(framealpha=legend_alpha)
+        plt.xlabel("Time (s)")
+        plt.xlim([0, t_total_sim])
+        plt.ylabel("Estimated Torque (Nm)")
         plt.grid(True)
 
         # Plot Servo Angle as State
@@ -237,7 +260,7 @@ class Visualizer:
 
         # Plot Thrust as State
         if self.include_thrust_model:
-            plt.subplot(ceil(n_plots/2), 2, 8)
+            plt.subplot(ceil(n_plots/2), 2, 6)
             plt.plot(time_data_x, x_sim_all[:self.data_idx, x_idx+1], label="ft1s")
             plt.plot(time_data_x, x_sim_all[:self.data_idx, x_idx+2], label="ft2s")
             x_idx += 2
@@ -259,7 +282,7 @@ class Visualizer:
         if self.include_thrust_model:
             plt.subplot(ceil(n_plots/2), 2, 10)
         else:
-            plt.subplot(ceil(n_plots/2), 2, 8)
+            plt.subplot(ceil(n_plots/2), 2, 6)
         plt.plot(time_data_x[1:], u_sim_all[:self.data_idx - 1, 0], label="ft1c")
         plt.plot(time_data_x[1:], u_sim_all[:self.data_idx - 1, 1], label="ft2c")
         u_idx = 1

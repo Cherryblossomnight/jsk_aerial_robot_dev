@@ -167,9 +167,9 @@ class HydrusBase(RecedingHorizonBase):
         m2 = ca.SX.sym("m2")
         m3 = ca.SX.sym("m3")
         m4 = ca.SX.sym("m4")
-        m = ca.SX.sym("m")
+        self.m = ca.SX.sym("m")
         mass = ca.vertcat(m1, m2, m3, m4)
-        gravity = ca.SX.sym("gravity")
+        self.gravity = ca.SX.sym("gravity")
 
         I1xx = ca.SX.sym("I1xx")
         I1yy = ca.SX.sym("I1yy")
@@ -194,7 +194,7 @@ class HydrusBase(RecedingHorizonBase):
         t_rotor = ca.SX.sym("t_rotor")
         t_servo = ca.SX.sym("t_servo")
 
-        phy_params = ca.vertcat(l, mass, m, gravity, I1xx, I1yy, I1zz, I2xx, I2yy, I2zz, I3xx, I3yy, I3zz, I4xx, I4yy, I4zz, self.kq_d_kt,
+        phy_params = ca.vertcat(l, mass, self.m, self.gravity, I1xx, I1yy, I1zz, I2xx, I2yy, I2zz, I3xx, I3yy, I3zz, I4xx, I4yy, I4zz, self.kq_d_kt,
                                 self.dr1, self.dr2, self.dr3, self.dr4, t_rotor, t_servo)
         parameters = ca.vertcat(parameters, phy_params)
 
@@ -247,7 +247,7 @@ class HydrusBase(RecedingHorizonBase):
         l_r3 = l_vec + ca.mtimes(rot_1_2, l_vec) + ca.mtimes(ca.mtimes(rot_2_3, rot_1_2), l_vec/2)
         l_r4 = l_vec + ca.mtimes(rot_1_2, l_vec) + ca.mtimes(ca.mtimes(rot_2_3, rot_1_2), l_vec) + ca.mtimes(ca.mtimes(rot_3_4, ca.mtimes(rot_2_3, rot_1_2)), l_vec/2)
 
-        tran_r2c = (m1*l_r1 + m2*l_r2 + m3*l_r3 + m4*l_r4) / m
+        tran_r2c = (m1*l_r1 + m2*l_r2 + m3*l_r3 + m4*l_r4) / self.m
 
         rot_c_1 =  ca.vertcat(
                 ca.horzcat(ca.cos(self.j1s), ca.sin(self.j1s), 0), ca.horzcat(-ca.sin(self.j1s), ca.cos(self.j1s), 0), ca.horzcat(0, 0, 1)
@@ -398,12 +398,12 @@ class HydrusBase(RecedingHorizonBase):
             ca.mtimes(ca.SX.eye(3), ca.mtimes(self.tran_c_4.T, self.tran_c_4)) - ca.mtimes(self.tran_c_4, self.tran_c_4.T)
 
         I_inv = ca.inv(self.I)
-        g_w = ca.vertcat(0, 0, -gravity)  # World frame
+        g_w = ca.vertcat(0, 0, -self.gravity)  # World frame
         
         # Dynamic model (Time-derivative of states)
         ds = ca.vertcat(
             self.v,
-            (ca.mtimes(rot_wb, fu_b) + self.fds_w + self.fdp_w) / m + g_w,
+            (ca.mtimes(rot_wb, fu_b) + self.fds_w + self.fdp_w) / self.m + g_w,
             (-self.wx * self.qx - self.wy * self.qy - self.wz * self.qz) / 2,
             (self.wx * self.qw + self.wz * self.qy - self.wy * self.qz) / 2,
             (self.wy * self.qw - self.wz * self.qx + self.wx * self.qz) / 2,
@@ -521,41 +521,13 @@ class HydrusBase(RecedingHorizonBase):
         I_matrix_fun = ca.Function('I_matrix_fun', [model.p[4:30], model.x], [self.I])
         return np.matrix(I_matrix_fun(params, x_now).full())
     
-    # def calculate_constaints(sel, nx, nu, lbu, ubu):
-    #     """
-    #     Use OcpSolver to create constraints for the quadrotor model.
-    #     """
-    #     # Construct OCP
-    #     ocp = AcadosOcp()
-    #     ocp.model = model
-    #     ocp.dims.N = 1     
-    #     ocp.dims.nx = nx
-    #     ocp.dims.nu = nu
-    #     ocp.dims.ny = 4
-    #     ocp.dims.ny_e = 0
-    #     ocp.cost.cost_type = "LINEAR_LS"
-    #     ocp.cost.cost_type_e = "LINEAR_LS"
-    #     ocp.cost.Vu = np.eye(nu)
-    #     ocp.cost.yref = np.zeros(4)     # 你运行时设置为 u_ref
-    #     ocp.cost.W = np.eye(4)
-    #     ocp.constraints.idxbu = np.array([0, 1, 2, 3])
-    #     ocp.constraints.lbu = np.array([-1, -1, -1, 0])  # 示例下界
-    #     ocp.constraints.ubu = np.array([1, 1, 1, 10])    # 示例上界
-    #     ocp.constraints.x0 = np.array([0])              # dummy
-
-    #     ocp.solver_options.qp_solver = "FULL_CONDENSING_QPOASES"
-    #     ocp.solver_options.nlp_solver_type = "SQP"
-    #     ocp.solver_options.hessian_approx = "GAUSS_NEWTON"
-    #     ocp.solver_options.integrator_type = "ERK"
-    #     ocp.solver_options.tf = 0.01
-
-    #     solver = AcadosOcpSolver(ocp, json_file="projection_ocp.json")
-
-    #     u_ref = np.array([0.5, 0.2, -0.3, 8.0])
-    #     solver.set(0, "yref", u_ref)
-    #     solver.solve()
-    #     u_proj = solver.get(0, "u")
-    #     print(u_proj)
+    def get_comp_of_external_wrench(self, params, x_now):
+        model = super().get_acados_model()
+        sum_momentum = ca.vertcat(self.m * self.v, ca.mtimes(self.I, self.w))
+        N = ca.vertcat(self.m * ca.vertcat(0, 0, self.gravity), ca.cross(self.w, ca.mtimes(self.I, self.w)))
+        sum_momentum_fun = ca.Function('sum_momentum_fun', [model.p[4:30], model.x], [sum_momentum])
+        N_fun = ca.Function('N_fun', [model.p[4:30], model.x], [N])
+        return np.squeeze(np.array(sum_momentum_fun(params, x_now).full())), np.squeeze(np.array(N_fun(params, x_now).full())) 
 
     def create_acados_ocp_solver(self) -> AcadosOcpSolver:
         """
@@ -791,55 +763,6 @@ class HydrusBase(RecedingHorizonBase):
         print("Generated C code for acados solver successfully to " + os.getcwd())
 
         return solver
-    # def create_acados_mhe_ocp_solver(self):
-    #     # Create OCP object and set basic properties
-    #     ocp = super().get_ocp()
-        
-    #     # Model dimensions
-    #     nx = ocp.model.x.size()[0]; nw = ocp.model.u.size()[0]
-    #     n_meas = ocp.model.cost_y_expr.size()[0] - nw
-        
-    #     # Get weights from parametrization child file
-    #     Q_R, R_Q, Q_P = self.get_weights()
-
-    #     # Cost function options
-    #     ocp.cost.cost_type_0 = "NONLINEAR_LS"
-    #     ocp.cost.cost_type = "NONLINEAR_LS"
-    #     ocp.cost.cost_type_e = "NONLINEAR_LS"
-    #     # Concatenate to create diagonal matrix: W_0 = diag(Q_R, R_Q, Q_P)
-    #     W = np.block([[Q_R, np.zeros((n_meas, nw))], [np.zeros((nw, n_meas)), R_Q]])
-    #     ocp.cost.W_0 = np.block([[W, np.zeros((n_meas + nw, nx))], [np.zeros((nx, n_meas + nw)), Q_P]])
-    #     ocp.cost.W = W
-    #     ocp.cost.W_e = Q_R      # Weight matrix at terminal shooting node (N)
-    #     print("W_0: \n", ocp.cost.W_0)
-    #     print("W: \n", ocp.cost.W)
-    #     print("W_e: \n", ocp.cost.W_e)
-
-    #     # Note: no constraints set
-
-    #     # Reference
-    #     ocp.cost.yref_0 = np.zeros(n_meas + nw + nx)
-    #     ocp.cost.yref = np.zeros(n_meas + nw)
-    #     ocp.cost.yref_e = np.zeros(n_meas)
-
-    #     # Solver options
-    #     ocp.solver_options.qp_solver = "PARTIAL_CONDENSING_HPIPM"
-    #     ocp.solver_options.hpipm_mode = "BALANCE"  # "BALANCE", "SPEED_ABS", "SPEED", "ROBUST". Default: "BALANCE".
-    #     # Start up flags:       [Seems only works for FULL_CONDENSING_QPOASES]
-    #     # 0: no warm start; 1: warm start; 2: hot start. Default: 0
-    #     # ocp.solver_options.qp_solver_warm_start = 1
-    #     ocp.solver_options.hessian_approx = "GAUSS_NEWTON"
-    #     ocp.solver_options.integrator_type = "ERK"  # explicit Runge-Kutta integrator
-    #     ocp.solver_options.print_level = 0
-    #     ocp.solver_options.nlp_solver_type = "SQP_RTI"
-    #     ocp.solver_options.qp_solver_cond_N = self.params["N_steps"]
-    #     ocp.solver_options.tf = self.params["T_horizon"]
-
-    #     # Build acados ocp into current working directory (which was created in super class)
-    #     json_file_path = os.path.join("./" + ocp.model.name + "_acados_ocp.json")
-    #     solver = AcadosOcpSolver(ocp, json_file=json_file_path, build=True)
-    #     print("Generated C code for acados solver successfully to " + os.getcwd())
-    #     return solver
 
     @abstractmethod
     def get_reference(self):
