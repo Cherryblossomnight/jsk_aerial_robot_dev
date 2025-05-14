@@ -22,6 +22,7 @@ class Visualizer:
             include_thrust_model = False,
             include_cog_dist_model = False,
             include_cog_dist_est = False,
+            include_end_effector_dist_model = False,
             is_record_diff_u=False,
             is_reference=False,
         ):
@@ -42,6 +43,7 @@ class Visualizer:
         self.include_thrust_model = include_thrust_model
         self.include_cog_dist_model = include_cog_dist_model
         self.include_cog_dist_est = include_cog_dist_est
+        self.include_end_effector_dist_model = include_end_effector_dist_model
         self.is_record_diff_u = is_record_diff_u
         self.is_reference = is_reference
 
@@ -237,6 +239,8 @@ class Visualizer:
         plt.ylabel("Estimated Torque (Nm)")
         plt.grid(True)
 
+       
+
         # Plot Servo Angle as State
         x_idx = 12
         if self.tilt and self.include_servo_model:
@@ -351,20 +355,26 @@ class Visualizer:
 
         if self.include_cog_dist_model:
             # Plot Disturbance Force as State in NMPC
-            plt.subplot(ceil(n_plots/2), 2, 9)
-            plt.plot(time_data_x, x_sim_all[:self.data_idx, 16], label="f_d_x")
-            plt.plot(time_data_x, x_sim_all[:self.data_idx, 17], label="f_d_y")
-            plt.plot(time_data_x, x_sim_all[:self.data_idx, 18], label="f_d_z")
+            if self.include_end_effector_dist_model:
+                plt.subplot(ceil(n_plots/2), 2, 7)
+            else:
+                plt.subplot(ceil(n_plots/2), 2, 9)
+            plt.plot(time_data_x, x_sim_all[:self.data_idx, 19], 'c--', label="fx")
+            plt.plot(time_data_x, x_sim_all[:self.data_idx, 20], 'm--', label="fy")
+            plt.plot(time_data_x, x_sim_all[:self.data_idx, 21], 'y--', label="fz")
             plt.legend(framealpha=legend_alpha, loc="upper left")
             plt.xlim([0, t_total_sim])
             plt.ylabel("Disturbance Force (N)")
             plt.grid(True)
 
             # Plot Disturbance Torque as State in NMPC
-            plt.subplot(ceil(n_plots/2), 2, 10)
-            plt.plot(time_data_x, x_sim_all[:self.data_idx, 19], label="tau_d_x")
-            plt.plot(time_data_x, x_sim_all[:self.data_idx, 20], label="tau_d_y")
-            plt.plot(time_data_x, x_sim_all[:self.data_idx, 21], label="tau_d_z")
+            if self.include_end_effector_dist_model:
+                plt.subplot(ceil(n_plots/2), 2, 8)
+            else:
+                plt.subplot(ceil(n_plots/2), 2, 10)
+            plt.plot(time_data_x, x_sim_all[:self.data_idx, 22], 'c--', label="tx")
+            plt.plot(time_data_x, x_sim_all[:self.data_idx, 23], 'm--', label="ty")
+            plt.plot(time_data_x, x_sim_all[:self.data_idx, 24], 'y--', label="tz")
             plt.legend(framealpha=legend_alpha, loc="upper left")
             plt.xlim([0, t_total_sim])
             plt.ylabel("Disturbance Torque (N*m)")
@@ -372,29 +382,20 @@ class Visualizer:
 
             plot_idx += 2
 
-        if self.include_cog_dist_est:
-            # Plot estimated Disturbance Force by MHE
-            plt.subplot(ceil(n_plots/2), 2, plot_idx+1)
-            plt.plot(time_data_x, self.est_disturb_f_w_all[:self.data_idx, 0], label="est. f_d_x")
-            plt.plot(time_data_x, self.est_disturb_f_w_all[:self.data_idx, 1], label="est. f_d_y")
-            plt.plot(time_data_x, self.est_disturb_f_w_all[:self.data_idx, 2], label="est. f_d_z")
+        if self.include_end_effector_dist_model:
+            plt.subplot(ceil(n_plots/2), 2, 9)
+            plt.plot(time_data_x, x_sim_all[:self.data_idx, 25], label="fx_end")
+            plt.plot(time_data_x, x_sim_all[:self.data_idx, 26], label="fy_end")
+            plt.plot(time_data_x, x_sim_all[:self.data_idx, 27], label="fz_end")
             plt.legend(framealpha=legend_alpha, loc="upper left")
             plt.xlim([0, t_total_sim])
-            plt.ylabel("Est. Disturbance Force (N)")
-            plt.grid(True)
-
-            # Plot estimated Disturbance Torque by MHE
-            plt.subplot(ceil(n_plots/2), 2, plot_idx+2)
-            plt.plot(time_data_x, self.est_disturb_tau_g_all[:self.data_idx, 0], label="est. tau_d_x")
-            plt.plot(time_data_x, self.est_disturb_tau_g_all[:self.data_idx, 1], label="est. tau_d_y")
-            plt.plot(time_data_x, self.est_disturb_tau_g_all[:self.data_idx, 2], label="est. tau_d_z")
-            plt.legend(framealpha=legend_alpha, loc="upper left")
-            plt.xlim([0, t_total_sim])
-            plt.ylabel("Est. Disturbance Torque (N*m)")
+            plt.ylabel("Disturbance Force on End Effector (N)")
             plt.grid(True)
 
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-
+        fig2 = plt.figure(figsize=(20, 15))
+        plt.plot(x_sim_all[1200:self.data_idx, 1], x_sim_all[1200:self.data_idx, 2], 'r', label="real")
+        plt.plot(r_sim_all[1200:self.data_idx, 1], r_sim_all[1200:self.data_idx, 2], 'b', label="target")
         plt.show()
 
     def visualize_less(self, ts_sim: float, t_total_sim: float):

@@ -23,10 +23,12 @@ class HydrusThrust(HydrusBase):
         self.tilt = False
         self.include_servo_model = True
         self.include_servo_derivative = False
+        self.include_servo_dynamic = True
         self.include_thrust_model = False   # TODO extend to include_thrust_derivative
         self.include_cog_dist_model = True
         self.include_cog_dist_parameter = False
         self.include_impedance = False
+        self.include_end_effector_dist_model = True
 
         # Read parameters from configuration file in the robot's package
         self.read_params("controller", "nmpc", "beetle", "BeetleNMPCFull.yaml")
@@ -52,8 +54,10 @@ class HydrusThrust(HydrusBase):
             qe_z + self.qzr,
             self.w,
             self.j_s,
+            self.w_s,
             self.fds_w,
-            self.tau_ds_b
+            self.tau_ds_b,
+            self.fde_w,
         )
 
         state_y_e = state_y
@@ -81,13 +85,19 @@ class HydrusThrust(HydrusBase):
                 self.params["Qw_z"],
                 1,
                 1,
+                1, # joint angles
                 1,
                 1,
+                1, # joint velocities
                 1,
                 1,
+                1, 
                 1,
                 1,
+                1, # disturbance
                 1,
+                1,
+                1, # end_effector
             ]
         )
         print("Q: \n", Q)
