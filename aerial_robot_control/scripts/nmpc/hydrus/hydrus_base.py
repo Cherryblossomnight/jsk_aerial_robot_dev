@@ -96,7 +96,7 @@ class HydrusBase(RecedingHorizonBase):
         self.wy = ca.SX.sym("wy")
         self.wz = ca.SX.sym("wz");
         self.w = ca.vertcat(self.wx, self.wy, self.wz)
-        states = ca.vertcat(self.p, self.v, self.q, self.w)
+        self.states = ca.vertcat(self.p, self.v, self.q, self.w)
 
         # - Extend state-space by dynamics of servo angles (actual)
         # Differentiate between actual angles and control angles
@@ -107,14 +107,14 @@ class HydrusBase(RecedingHorizonBase):
             self.j2s = ca.SX.sym("j2s")
             self.j3s = ca.SX.sym("j3s")
             self.j_s = ca.vertcat(self.j1s, self.j2s, self.j3s)
-            states = ca.vertcat(states, self.j_s)
+            self.states = ca.vertcat(self.states, self.j_s)
         
         if self.include_servo_dynamic:
             self.w1s = ca.SX.sym("w1s")
             self.w2s = ca.SX.sym("w2s")
             self.w3s = ca.SX.sym("w3s")
             self.w_s = ca.vertcat(self.w1s, self.w2s, self.w3s)
-            states = ca.vertcat(states, self.w_s)
+            self.states = ca.vertcat(self.states, self.w_s)
 
         # - Extend state-space by dynamics of rotor (actual)
         # Differentiate between actual thrust and control thrust
@@ -124,7 +124,7 @@ class HydrusBase(RecedingHorizonBase):
             self.ft3s = ca.SX.sym("ft3s")
             self.ft4s = ca.SX.sym("ft4s")
             self.ft_s = ca.vertcat(self.ft1s, self.ft2s, self.ft3s, self.ft4s)
-            states = ca.vertcat(states, self.ft_s)
+            self.states = ca.vertcat(self.states, self.ft_s)
 
         # - Extend state-space by disturbance on CoG (actual)
         # Differentiate between actual disturbance set as state and set as parameter
@@ -134,14 +134,14 @@ class HydrusBase(RecedingHorizonBase):
             # Torque disturbance applied to CoG in Body frame
             self.tau_ds_b = ca.SX.sym("tau_ds_b", 3)
 
-            states = ca.vertcat(states, self.fds_w, self.tau_ds_b)
+            self.states = ca.vertcat(self.states, self.fds_w, self.tau_ds_b)
         else:
             self.fds_w = ca.vertcat(0.0, 0.0, 0.0)
             self.tau_ds_b = ca.vertcat(0.0, 0.0, 0.0)
 
         if self.include_end_effector_dist_model:
             self.fde_w = ca.SX.sym("fde_w", 3)
-            states = ca.vertcat(states, self.fde_w)
+            self.states = ca.vertcat(self.states, self.fde_w)
         else:
             self.fde_w = ca.vertcat(0.0, 0.0, 0.0)
 
@@ -171,13 +171,13 @@ class HydrusBase(RecedingHorizonBase):
         parameters = ca.vertcat(self.qwr, self.qxr, self.qyr, self.qzr)
 
         # added on 2025-3-28: make physical parameters available in the model
-        l = ca.SX.sym("l")
-        m1 = ca.SX.sym("m1")
-        m2 = ca.SX.sym("m2")
-        m3 = ca.SX.sym("m3")
-        m4 = ca.SX.sym("m4")
+        self.l = ca.SX.sym("l")
+        self.m1 = ca.SX.sym("m1")
+        self.m2 = ca.SX.sym("m2")
+        self.m3 = ca.SX.sym("m3")
+        self.m4 = ca.SX.sym("m4")
         self.m = ca.SX.sym("m")
-        mass = ca.vertcat(m1, m2, m3, m4)
+        mass = ca.vertcat(self.m1, self.m2, self.m3, self.m4)
         self.gravity = ca.SX.sym("gravity")
 
         I1xx = ca.SX.sym("I1xx")
@@ -193,12 +193,12 @@ class HydrusBase(RecedingHorizonBase):
         I4yy = ca.SX.sym("I4yy")
         I4zz = ca.SX.sym("I4zz")
 
-        m11 = I2zz+I3zz+I4zz+self.m*l**2*(15/4+3*ca.cos(self.j2s)+ca.cos(self.j3s)+ca.cos(self.j2s+self.j3s))
-        m12 = I3zz+I4zz+self.m*l**2*(3/2+3*ca.cos(self.j2s)/2+ca.cos(self.j3s)+ca.cos(self.j2s+self.j3s)/2)
-        m13 = I4zz+self.m*l**2*(1/4+ca.cos(self.j3s)/2+ca.cos(self.j2s+self.j3s)/2)
-        m22 = I3zz+I4zz+self.m*l**2*(3/2+ca.cos(self.j3s))
-        m23 = I4zz+self.m*l**2*(1/4+ca.cos(self.j3s)/2)
-        m33 = I4zz+self.m*l**2*(1/4)
+        m11 = I2zz+I3zz+I4zz+self.m*self.l**2*(15/4+3*ca.cos(self.j2s)+ca.cos(self.j3s)+ca.cos(self.j2s+self.j3s))
+        m12 = I3zz+I4zz+self.m*self.l**2*(3/2+3*ca.cos(self.j2s)/2+ca.cos(self.j3s)+ca.cos(self.j2s+self.j3s)/2)
+        m13 = I4zz+self.m*self.l**2*(1/4+ca.cos(self.j3s)/2+ca.cos(self.j2s+self.j3s)/2)
+        m22 = I3zz+I4zz+self.m*self.l**2*(3/2+ca.cos(self.j3s))
+        m23 = I4zz+self.m*self.l**2*(1/4+ca.cos(self.j3s)/2)
+        m33 = I4zz+self.m*self.l**2*(1/4)
 
         self.II = ca.vertcat(
                 ca.horzcat(m11, m12, m13), ca.horzcat(m12, m22, m23), ca.horzcat(m13, m23, m33)
@@ -216,7 +216,7 @@ class HydrusBase(RecedingHorizonBase):
         t_rotor = ca.SX.sym("t_rotor")
         t_servo = ca.SX.sym("t_servo")
 
-        phy_params = ca.vertcat(l, mass, self.m, self.gravity, I1xx, I1yy, I1zz, I2xx, I2yy, I2zz, I3xx, I3yy, I3zz, I4xx, I4yy, I4zz, self.kq_d_kt,
+        phy_params = ca.vertcat(self.l, mass, self.m, self.gravity, I1xx, I1yy, I1zz, I2xx, I2yy, I2zz, I3xx, I3yy, I3zz, I4xx, I4yy, I4zz, self.kq_d_kt,
                                 self.dr1, self.dr2, self.dr3, self.dr4, t_rotor, t_servo)
         parameters = ca.vertcat(parameters, phy_params)
 
@@ -263,13 +263,13 @@ class HydrusBase(RecedingHorizonBase):
         rot_3_4 = ca.vertcat(
                 ca.horzcat(ca.cos(self.j3s), -ca.sin(self.j3s), 0), ca.horzcat(ca.sin(self.j3s), ca.cos(self.j3s), 0), ca.horzcat(0, 0, 1)
             )
-        self.l_vec = ca.vertcat(l, 0, 0)
+        self.l_vec = ca.vertcat(self.l, 0, 0)
         l_r1 = self.l_vec/2
         l_r2 = self.l_vec + ca.mtimes(rot_1_2, self.l_vec/2)
         l_r3 = self.l_vec + ca.mtimes(rot_1_2, self.l_vec) + ca.mtimes(ca.mtimes(rot_2_3, rot_1_2), self.l_vec/2)
         l_r4 = self.l_vec + ca.mtimes(rot_1_2, self.l_vec) + ca.mtimes(ca.mtimes(rot_2_3, rot_1_2), self.l_vec) + ca.mtimes(ca.mtimes(rot_3_4, ca.mtimes(rot_2_3, rot_1_2)), self.l_vec/2)
 
-        tran_r2c = (m1*l_r1 + m2*l_r2 + m3*l_r3 + m4*l_r4) / self.m
+        tran_r2c = (self.m1*l_r1 + self.m2*l_r2 + self.m3*l_r3 + self.m4*l_r4) / self.m
 
         self.rot_c_1 =  ca.vertcat(
                 ca.horzcat(ca.cos(self.j1s), ca.sin(self.j1s), 0), ca.horzcat(-ca.sin(self.j1s), ca.cos(self.j1s), 0), ca.horzcat(0, 0, 1)
@@ -313,23 +313,23 @@ class HydrusBase(RecedingHorizonBase):
         self.rot_wb = ca.vertcat(row_1, row_2, row_3)
         # - Calculate Jacobians
         J_v1 = ca.vertcat(
-                ca.horzcat(-l/2*ca.sin(self.j1s), 0, 0), 
-                ca.horzcat(l/2*ca.cos(self.j1s), 0, 0), 
+                ca.horzcat(-self.l/2*ca.sin(self.j1s), 0, 0), 
+                ca.horzcat(self.l/2*ca.cos(self.j1s), 0, 0), 
                 ca.horzcat(0, 0, 0)) 
         
         J_v2 = ca.vertcat(
-                ca.horzcat(-l*ca.sin(self.j1s)-l/2*ca.sin(self.j1s+self.j2s), -l/2*ca.sin(self.j1s+self.j2s), 0), 
-                ca.horzcat(l*ca.cos(self.j1s)+l/2*ca.cos(self.j1s+self.j2s), l/2*ca.cos(self.j1s+self.j2s), 0), 
+                ca.horzcat(-self.l*ca.sin(self.j1s)-self.l/2*ca.sin(self.j1s+self.j2s), -self.l/2*ca.sin(self.j1s+self.j2s), 0), 
+                ca.horzcat(self.l*ca.cos(self.j1s)+self.l/2*ca.cos(self.j1s+self.j2s), self.l/2*ca.cos(self.j1s+self.j2s), 0), 
                 ca.horzcat(0, 0, 0)) 
 
         J_v3 = ca.vertcat(
-                ca.horzcat(-l*ca.sin(self.j1s)-l*ca.sin(self.j1s+self.j2s)-l/2*ca.sin(self.j1s+self.j2s+self.j3s), -l*ca.sin(self.j1s+self.j2s)-l/2*ca.sin(self.j1s+self.j2s+self.j3s), -l/2*ca.sin(self.j1s+self.j2s+self.j3s)), 
-                ca.horzcat(l*ca.cos(self.j1s)+l*ca.cos(self.j1s+self.j2s)+l/2*ca.cos(self.j1s+self.j2s+self.j3s), l*ca.cos(self.j1s+self.j2s)+l/2*ca.cos(self.j1s+self.j2s+self.j3s), l/2*ca.cos(self.j1s+self.j2s+self.j3s)), 
+                ca.horzcat(-self.l*ca.sin(self.j1s)-self.l*ca.sin(self.j1s+self.j2s)-self.l/2*ca.sin(self.j1s+self.j2s+self.j3s), -self.l*ca.sin(self.j1s+self.j2s)-self.l/2*ca.sin(self.j1s+self.j2s+self.j3s), -self.l/2*ca.sin(self.j1s+self.j2s+self.j3s)), 
+                ca.horzcat(self.l*ca.cos(self.j1s)+self.l*ca.cos(self.j1s+self.j2s)+self.l/2*ca.cos(self.j1s+self.j2s+self.j3s), self.l*ca.cos(self.j1s+self.j2s)+self.l/2*ca.cos(self.j1s+self.j2s+self.j3s), self.l/2*ca.cos(self.j1s+self.j2s+self.j3s)), 
                 ca.horzcat(0, 0, 0)) 
 
         J_ve = ca.vertcat(
-                ca.horzcat(-l*ca.sin(self.j1s)-l*ca.sin(self.j1s+self.j2s)-l*ca.sin(self.j1s+self.j2s+self.j3s), -l*ca.sin(self.j1s+self.j2s)-l*ca.sin(self.j1s+self.j2s+self.j3s), -l*ca.sin(self.j1s+self.j2s+self.j3s)), 
-                ca.horzcat(l*ca.cos(self.j1s)+l*ca.cos(self.j1s+self.j2s)+l*ca.cos(self.j1s+self.j2s+self.j3s), l*ca.cos(self.j1s+self.j2s)+l*ca.cos(self.j1s+self.j2s+self.j3s), l*ca.cos(self.j1s+self.j2s+self.j3s)), 
+                ca.horzcat(-self.l*ca.sin(self.j1s)-self.l*ca.sin(self.j1s+self.j2s)-self.l*ca.sin(self.j1s+self.j2s+self.j3s), -self.l*ca.sin(self.j1s+self.j2s)-self.l*ca.sin(self.j1s+self.j2s+self.j3s), -self.l*ca.sin(self.j1s+self.j2s+self.j3s)), 
+                ca.horzcat(self.l*ca.cos(self.j1s)+self.l*ca.cos(self.j1s+self.j2s)+self.l*ca.cos(self.j1s+self.j2s+self.j3s), self.l*ca.cos(self.j1s+self.j2s)+self.l*ca.cos(self.j1s+self.j2s+self.j3s), self.l*ca.cos(self.j1s+self.j2s+self.j3s)), 
                 ca.horzcat(0, 0, 0)) 
 
         self.J_ve_world = ca.mtimes(self.rot_wb, ca.mtimes(rot_r2c.T, J_ve))
@@ -496,8 +496,8 @@ class HydrusBase(RecedingHorizonBase):
                             self.ad_c
                             )
         # Or use numerical differentation
-        Kp_servo = ca.diag(ca.vertcat(500.0, 500.0, 500.0))
-        Kd_servo = ca.diag(ca.vertcat(50.0, 40.0, 15.0))
+        Kp_servo = ca.diag(ca.vertcat(550.0, 450.0, 500.0))
+        Kd_servo = ca.diag(ca.vertcat(100.0, 80.0, 15.0))
         if self.include_servo_model:
             if not self.include_servo_dynamic:
                 ds = ca.vertcat(ds,
@@ -530,12 +530,12 @@ class HydrusBase(RecedingHorizonBase):
 
 
         # Assemble acados function
-        f = ca.Function("f", [states, controls], [ds], ["state", "control_input"], ["ds"], {"allow_free": True})
+        f = ca.Function("f", [self.states, controls], [ds], ["state", "control_input"], ["ds"], {"allow_free": True})
 
         # Implicit dynamics
         # Note: Used only mainly because of acados template
-        x_dot = ca.SX.sym("x_dot", states.size())  # Combined state vector
-        f_impl = x_dot - f(states, controls)
+        x_dot = ca.SX.sym("x_dot", self.states.size())  # Combined state vector
+        f_impl = x_dot - f(self.states, controls)
 
         # Get terms of cost function
         if self.include_impedance:
@@ -552,12 +552,13 @@ class HydrusBase(RecedingHorizonBase):
         # Assemble acados model
         model = AcadosModel()
         model.name = self.model_name
-        model.f_expl_expr = f(states, controls)  # CasADi expression for the explicit dynamics
+        model.f_expl_expr = f(self.states, controls)  # CasADi expression for the explicit dynamics
         model.f_impl_expr = f_impl  # CasADi expression for the implicit dynamics
-        model.x = states
+        model.x = self.states
         model.xdot = x_dot
         model.u = controls
         model.p = parameters
+        print(parameters)
         model.cost_y_expr = ca.vertcat(state_y, control_y)  # NONLINEAR_LS
         model.cost_y_expr_e = state_y_e
 
@@ -607,7 +608,7 @@ class HydrusBase(RecedingHorizonBase):
 
     def get_end_Jacobian(self, params, x_now):
         model = super().get_acados_model()
-        jacobian_fun = ca.Function('c_vector_fun', [model.p[4:30], model.x], [self.J_ve_world])
+        jacobian_fun = ca.Function('c_vector_fun', [model.p[4:30], model.x], [self.J_ve_cog])
         return np.matrix(jacobian_fun(params, x_now).full())
     
     def get_comp_of_external_wrench(self, params, x_now):
@@ -625,16 +626,21 @@ class HydrusBase(RecedingHorizonBase):
         pe_cog_fun = ca.Function('pe_cog_fun', [model.p[4:30], model.x], [pe_cog])
         pe_world_fun = ca.Function('pe_world_fun', [model.p[4:30], model.x], [pe_world])
         return np.squeeze(np.array(pe_cog_fun(params, x_now).full())), np.squeeze(np.array(pe_world_fun(params, x_now).full())) 
-    
-    # def get_joint_angles(self, params, x_now, xd):
-    #     model = super().get_acados_model()
-    #     pe_world = ca.mtimes(self.rot_wb, self.tran_c_e) + self.p
-    #     pe_world_fun = ca.Function('pe_world_fun', [model.p[4:30], model.x], [pe_world])
-    #     x_inv = ca.MX.sym('x_inv', 28)
-    #     inv_fun = pe_world_fun(params, x_now) - xd
-    #     rootfinder = ca.rootfinder('rf', 'newton', x_now, inv_fun)
-    #     print(rootfinder([]))
 
+    def inv_kinematics(self, params, x_now, pe_cog_tar):
+        model = super().get_acados_model()
+        pe_cog = self.tran_c_4 + ca.mtimes(self.rot_c_4, self.l_vec/2)
+        pe_cog_fun = ca.Function('pe_cog_fun', [model.p[4:30], model.x], [pe_cog])
+        cost = ca.sumsqr(pe_cog - pe_cog_tar)
+        nlp = {'x': ca.vertcat(self.j1s, self.j2s, self.j3s),
+               'f': cost,
+               'p': ca.vertcat(self.l, self.m1, self.m2, self.m3, self.m4, self.m),
+               'g': ca.vertcat(self.j1s, self.j2s, self.j3s)}
+        opts = {'ipopt': {'print_level': 1}, 'print_time': 0}
+        solver = ca.nlpsol('solver', 'ipopt', nlp, opts)
+        sol = solver(x0=x_now[13:16], p=params[0:6], lbg=[-np.pi/2,-np.pi/2,-np.pi/2], ubg=[np.pi/2,np.pi/2,np.pi/2])
+        return np.array(sol['x'].full().flatten())
+    
     def create_acados_ocp_solver(self) -> AcadosOcpSolver:
         """
         Create generic acados solver for NMPC framework of a quadrotor.

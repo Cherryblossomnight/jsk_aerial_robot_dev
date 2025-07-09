@@ -171,7 +171,7 @@ def main(args):
 
     ts_sim = 0.005  # or 0.001
 
-    t_total_sim = 30.0
+    t_total_sim = 15.0
     if args.plot_type == 1:
         t_total_sim = 4.0
     if args.plot_type == 2:
@@ -239,13 +239,20 @@ def main(args):
     target_prpy = np.array([[0.0, 0.0, 0.0]]).T
     xd_ddot = 0.0
     xd_dot = 0.0
-    xd = (np.sqrt(3)+7/4)*0.3
+    xd = 0.90466333
+
     xref = xd
     yd_ddot = 0.0
     yd_dot = 0.0
-    yd = 0.0
-    yref = 0.0
+    yd = 0.52230762
+    yref = yd
     cmd = False
+    pe_cog_sim = np.zeros(3)
+    pe_world_sim = np.zeros(3)
+    lam = 1.0
+    last_err = 0.0
+    last_q = u_cmd[4:7]
+    sim_start = False
     for i in range(N_sim):
         # --------- Update time ---------
         t_now = i * ts_sim
@@ -315,13 +322,20 @@ def main(args):
             #     target_rpy = np.array([[roll, pitch, yaw]]).T
 
             if t_now >= 10:
+                target_xyz = np.array([[0.0, 0.0, 2.0]]).T
             #     assert t_sqp_end <= 3.0
                 # if np.sqrt((y_target-x_now_sim[1])**2 + (z_target-x_now_sim[2])**2) < 0.1:
                 #     t_ctrl += ts_sim
                 #y_target = 0.5 * np.cos(np.pi/3*(t_now-6))
                 #z_target = 2 + 0.8 * np.sin(np.pi/3*(t_now-6))
 
-                x_now_sim[25:28] = [-3.0, 0.0, 0.0]
+                x_now_sim[25:28] = [5.0, 0.0, 0.0]
+            # if t_now >= 14:
+            #     x_now_sim[25:28] = [-3.0, 0.0, 0.0]
+            # if t_now >= 18:
+            #     x_now_sim[25:28] = [-2.0, 0.0, 0.0]
+            # if t_now >= 22:
+            #     x_now_sim[25:28] = [-1.0, 0.0, 0.0]
                 # target_xyz = np.array([[0.0, y_target, z_target]]).T
                 # target_rpy = np.array([[target_roll, target_pitch, 0.0]]).T
                 # target_vxyz = (target_xyz - target_pxyz)/ ts_sim
@@ -399,7 +413,7 @@ def main(args):
             #else:
             mdz = 5.0
             # calcaluate the translation acceleration
-            x_acc = (1/mdx - 1/m) * est_external_wrench[0] + 2.0*(target_xyz[0,0]-x_now[0]) + 2*0.7*np.sqrt(2.0)*(0.0-x_now[3])
+            x_acc = ( - 1/m) * est_external_wrench[0] + 2.0*(target_xyz[0,0]-x_now[0]) + 2*0.7*np.sqrt(2.0)*(0.0-x_now[3])
             y_acc = (1/mdy - 1/m) * est_external_wrench[1] + 2.0*(target_xyz[1,0]-x_now[1]) + 2*0.7*np.sqrt(2.0)*(0.0-x_now[4])
             z_acc = (1/mdz - 1/m) * est_external_wrench[2] + 8.0*(target_xyz[2,0]-x_now[2]) + 2*1.0*np.sqrt(8.0)*(0.0-x_now[5]) + 9.798
             # x_acc = 1.0*(target_xyz[0,0]-x_now[0]) + 1.6*(0.0-x_now[3])
@@ -428,10 +442,10 @@ def main(args):
             I_d = I
             Kp = np.matrix([[20.0, 0.0, 0.0],
                             [0.0, 20.0, 0.0],
-                            [0.0, 0.0, 3.0]])
+                            [0.0, 0.0, 4.0]])
             Kd = np.matrix([[2*0.5*np.sqrt(20*2), 0.0, 0.0],
                             [0.0, 2*0.5*np.sqrt(20*2), 0.0],
-                            [0.0, 0.0, 2*0.5*np.sqrt(3*4)]])
+                            [0.0, 0.0, 2*0.5*np.sqrt(4*4)]])
             ko = np.matrix(np.diag([6.0, 6.0, 6.0, 4.5, 4.5, 4.5]))
             delta_x = np.array([target_roll-roll, target_pitch-pitch, target_rpy[2,0]-yaw])
             delta_v = np.array([0.0-x_now[10], 0.0-x_now[11], 0.0-x_now[12]])
@@ -461,8 +475,8 @@ def main(args):
             mat = nmpc.get_alloc_matrix(nmpc.acados_init_p[4:30], x_now)
             delta_u = np.linalg.pinv(mat) @ np.array([z_acc*m, torque[0], torque[1], torque[2]])
             pe_cog, pe_world = nmpc.get_end_effector_position(nmpc.acados_init_p[4:30], x_now)
-            print("yaw: ", yaw)
-            print("joint", x_now[13:16])
+            # print("yaw: ", yaw)
+            # print("joint", x_now[13:16])
             # print("euler_acc: ", euler_acc)
             # print("delta_u: ", delta_u)
             # print("mat: ", np.linalg.pinv(mat))
@@ -473,27 +487,82 @@ def main(args):
         # We design Ma, Ca and Ka to realize the second order system in joints
         # Now xr_ddot = 0, xr_ddot = 0
         # Fext is get from the external force acting on the end effector
+
             if t_now >= 10:
                 Ma = 5
-                Ca = 2*0.35*np.sqrt(150)
-                Ka = 50
-                Fext = x_now_sim[25]
-                d_v = np.array([[xd_dot * ts_sim, yd_dot * ts_sim, 0.0]]).T
-                xd_ddot = (x_now_sim[25] - Ka * (xd - xref) - Ca * xd_dot) / Ma
-                yd_ddot = (x_now_sim[26] - Ka * (yd - yref) - Ca * yd_dot) / Ma
+                Ca = 2*0.35*np.sqrt(750)
+                Ka = 150
+
+                xd_ddot = (x_now_sim[25]*np.cos(yaw) + x_now_sim[26]*np.sin(yaw) - Ka * (xd - xref) - Ca * xd_dot) / Ma
+                yd_ddot = (-x_now_sim[25]*np.sin(yaw) + x_now_sim[26]*np.cos(yaw)  - Ka * (yd - yref) - Ca * yd_dot) / Ma
                 xd += xd_dot * ts_sim
                 yd += yd_dot * ts_sim
                 pd = np.array([[xd, yd, 0.0]]).T
                 
                 xd_dot += xd_ddot * ts_sim
                 yd_dot += yd_ddot * ts_sim 
-                jacobian = nmpc.get_end_Jacobian(nmpc.acados_init_p[4:30], x_now)
-                delta_q = np.linalg.pinv(jacobian) @ d_v
-                u_cmd[4:7] += np.squeeze(np.asarray(delta_q))
-                # nmpc.get_joint_angles(nmpc.acados_init_p[4:30], x_now, pd+x_now[0:2])
+                # Differential inverse kinematics
+                x_sim = x_now
+                x_sim[13:16] = last_q
+                pe_cog_tar = [xd, yd, pe_cog[2]]
+                print("pe_cog_tar: ",pe_cog_tar)
+                if not sim_start:
+                    pe_cog_sim = pe_cog
+                    sim_start = True
+                    print("pe_cog_sim: ",pe_cog_sim)
+                print("x_sim[13:16]: ", x_sim[13:16])
+                x_sim[13:16] = nmpc.inv_kinematics(nmpc.acados_init_p[4:30], x_sim, pe_cog_tar)
+                #print("yaw: ", yaw)
+                # x_sim[13:16] += np.squeeze(np.asarray(delta_q))
+                pe_cog_sim, pe_world_sim = nmpc.get_end_effector_position(nmpc.acados_init_p[4:30], x_sim)  
+                # iter = 0 
+                # while True:
+                #     if iter == 0:
+                #         print("x_sim: ", x_sim[13:16])
+                #         print("pe_cog_sim: ", pe_cog_sim,"pe_world_tar: ", pe_cog_tar,np.sqrt((pe_cog_sim[0]-pe_cog_tar[0])**2 + (pe_cog_sim[1]-pe_cog_tar[1])**2))
+                #     if np.sqrt((pe_cog_sim[0]-pe_cog_tar[0])**2 + (pe_cog_sim[1]-pe_cog_tar[1])**2) < 1e-3:
+                #         print("break")
+                #         #u_cmd[4:7] = x_sim[13:16]
+                #         break
+                #     jacobian = nmpc.get_end_Jacobian(nmpc.acados_init_p[4:30], x_sim)
+                  
+                   
+                #     # print("dv:", d_v)
+                #     # print("dq:",delta_q.T)
+                #     #print("x_sim: ", x_sim[13:16])
+                #     pe_cog_sim, pe_world_sim = nmpc.get_end_effector_position(nmpc.acados_init_p[4:30], x_now)  
+               
+                #     #if last_err < np.sqrt((pe_world_sim[0]-pe_world_tar[0])**2 + (pe_world_sim[1]-pe_world_tar[1])**2):
+                #         #last_err = np.sqrt((pe_world_sim[0]-pe_world_tar[0])**2 + (pe_world_sim[1]-pe_world_tar[1])**2)
+                   
+                #     #     delta_q = np.linalg.pinv(jacobian) @ (lam * d_v)
+                #     #     x_sim[13:16] += np.squeeze(np.asarray(delta_q))
+                #     #     pe_cog_sim, pe_world_sim = nmpc.get_end_effector_position(nmpc.acados_init_p[4:30], x_now)  
+                #     # lam = 1.0
+                #     #print(jacobian)
+                #    #print(np.linalg.pinv(jacobian))
+                #     #print(d_v)
+                #     #print(delta_q)
+                #     #print("---")
+                #     #print("pe_world_tar: ", pe_world_tar,"pe_world_sim: ", pe_world_sim," ",np.sqrt((pe_world_sim[0]-pe_world_tar[0])**2 + (pe_world_sim[1]-pe_world_tar[1])**2))
+                #     #print(np.sqrt((pe_world_sim[0]-pe_world_tar[0])**2 + (pe_world_sim[1]-pe_world_tar[1])**2))
+                #     iter += 1 
+                #     #print("pe_cog_sim: ", pe_cog_sim,"pe_cog_tar: ", pe_cog_tar,np.sqrt((pe_cog_sim[0]-pe_cog_tar[0])**2 + (pe_cog_sim[1]-pe_cog_tar[1])**2))
+                #     if iter > 50:
+                #         print("break iter")
+                        
+                #         break
+                print("pe_world: ", pe_world,"x_now: ", x_now_sim[0:3])
+                print("x_sim: ", x_sim[13:16])
+                print("yaw", yaw)
+                print(np.sqrt((pe_cog_sim[0]-pe_cog_tar[0])**2 + (pe_cog_sim[1]-pe_cog_tar[1])**2))
+                last_q = x_sim[13:16]
+                u_cmd[4:7] = x_sim[13:16]
+                #nmpc.cal_end_effector_position(nmpc.acados_init_p[4:30], x_now)
+                #u_cmd[4:7] += np.squeeze(np.asarray(delta_q))
                 # print("d_v: ", d_v)
-                # print("xd: ", xd, "yd: ", yd)
-                # print(pe_world, "x", x_now_sim[0], "y", x_now_sim[1])
+                #print("xd: ", xd, "xf: ", xref)
+                #print(pe_world, "x", x_now_sim[0], "y", x_now_sim[1])
 
 
 
@@ -528,6 +597,19 @@ def main(args):
             if x_now_sim[2] <= 0.0:
                 x_now_sim[2] = 0.0
                 x_now_sim[5] = 0.0
+        if x_now_sim[13] > np.pi/2:
+            x_now_sim[13] = np.pi/2
+        elif x_now_sim[13] < -np.pi/2:
+            x_now_sim[13] = -np.pi/2
+        if x_now_sim[14] > np.pi/2:
+            x_now_sim[14] = np.pi/2
+        elif x_now_sim[14] < -np.pi/2:
+            x_now_sim[14] = -np.pi/2
+        if x_now_sim[15] > np.pi/2:
+            x_now_sim[15] = np.pi/2
+        elif x_now_sim[15] < -np.pi/2:
+            x_now_sim[15] = -np.pi/2
+    
 
 
         # Save current simulation data for later comparison
