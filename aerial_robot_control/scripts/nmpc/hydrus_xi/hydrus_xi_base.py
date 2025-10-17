@@ -10,7 +10,7 @@ from rh_base import RecedingHorizonBase
 from hydrus.hydrus_reference_generator import HydrusReferenceGenerator
 
 
-class HydrusBase(RecedingHorizonBase):
+class HydrusXiBase(RecedingHorizonBase):
     """
     Base class for all multilinked aerial robots link hydrus and dragon.
     Inherits from RecedingHorizonBase which also lays foundations for MHE classes.
@@ -66,7 +66,7 @@ class HydrusBase(RecedingHorizonBase):
         # Create Reference Generator object
         self._reference_generator = self._create_reference_generator()
 
-    def get_reference_generator(self) -> HydrusReferenceGenerator:
+    def get_reference_generator(self) -> HydrusXiReferenceGenerator:
         return self._reference_generator
 
     def create_acados_model(self) -> AcadosModel:
@@ -355,28 +355,10 @@ class HydrusBase(RecedingHorizonBase):
         tao_j = ca.mtimes(self.J_ve_world,self.fde_w)
 
         # - Body to End-of-arm
-        denominator = np.sqrt(self.tran_c_1[0] ** 2 + self.tran_c_1[1] ** 2)
-        rot_be1 = np.array(
-            [[self.tran_c_1[0] / denominator, -self.tran_c_1[1] / denominator, 0], [self.tran_c_1[1] / denominator, self.tran_c_1[0] / denominator, 0],
-             [0, 0, 1]])
-
-        denominator = np.sqrt(self.tran_c_2[0] ** 2 + self.tran_c_2[1] ** 2)
-        rot_be2 = np.array(
-            [[self.tran_c_2[0] / denominator, -self.tran_c_2[1] / denominator, 0], [self.tran_c_2[1] / denominator, self.tran_c_2[0] / denominator, 0],
-             [0, 0, 1]])
-
-        denominator = np.sqrt(self.tran_c_3[0] ** 2 + self.tran_c_3[1] ** 2)
-        rot_be3 = np.array(
-            [[self.tran_c_3[0] / denominator, -self.tran_c_3[1] / denominator, 0], [self.tran_c_3[1] / denominator, self.tran_c_3[0] / denominator, 0],
-             [0, 0, 1]])
-
-        denominator = np.sqrt(self.tran_c_4[0] ** 2 + self.tran_c_4[1] ** 2)
-        rot_be4 = np.array(
-            [[self.tran_c_4[0] / denominator, -self.tran_c_4[1] / denominator, 0], [self.tran_c_4[1] / denominator, self.tran_c_4[0] / denominator, 0],
-             [0, 0, 1]])
 
         # - End-of-arm to Rotor
         # Take tilt rotation with angle alpha (a) of R frame to E frame into account
+        self.tilt_angle = np.pi * 20 / 180
         if self.tilt:
             # If servo dynamics are modeled, use angle state.
             # Else use angle control which is then assumed to be equal to the angle state at all times.
@@ -384,26 +366,35 @@ class HydrusBase(RecedingHorizonBase):
                 self.g1s = ca.SX.sym("g1s")# Joint angles
                 self.g2s = ca.SX.sym("g2s")
                 self.g3s = ca.SX.sym("g3s")
+                self.g4s = ca.SX.sym("g4s")
             # Either use the time-derivative of the servo angle as control input directly
-                self.g_s = ca.vertcat(self.g1s, self.g2s, self.g3s)
+                self.g_s = ca.vertcat(self.g1s, self.g2s, self.g3s, self.g4s)
+                self.states = ca.vertcat(self.states, self.g_s)
 
-            else:
-                a1 = self.a1c;
-                a2 = self.a2c;
-                a3 = self.a3c;
-                a4 = self.a4c
+                self.g1c = ca.SX.sym("g1c")# Joint angles
+                self.g2c = ca.SX.sym("g2c")
+                self.g3c = ca.SX.sym("g3c")
+                self.g4c = ca.SX.sym("g4c")
+            # Either use the time-derivative of the servo angle as control input directly
+                self.g_c = ca.vertcat(self.g1c, self.g2c, self.g3c, self.g4c)
 
-            rot_e1r1 = ca.vertcat(
-                ca.horzcat(1, 0, 0), ca.horzcat(0, ca.cos(a1), -ca.sin(a1)), ca.horzcat(0, ca.sin(a1), ca.cos(a1))
+            # clockwisely rotate tilt_angle
+            rot_tilt = ca.vertcat(
+                ca.horzcat(ca.cos(self.tilt_angle), 0, -ca.sin(self.tilt_angle)),
+                ca.horzcat(0, 1, 0),
+                ca.horzcat(ca.sin(self.tilt_angle), 0, ca.cos(self.tilt_angle))
             )
-            rot_e2r2 = ca.vertcat(
-                ca.horzcat(1, 0, 0), ca.horzcat(0, ca.cos(a2), -ca.sin(a2)), ca.horzcat(0, ca.sin(a2), ca.cos(a2))
+            rot_y1 = ca.vertcat(
+                ca.horzcat(ca.cos(self.g1s), -ca.sin(self.g1s), 0), ca.horzcat(ca.sin(self.g1s), ca.cos(self.g1s), 0), ca.horzcat(0, 0, 1)
             )
-            rot_e3r3 = ca.vertcat(
-                ca.horzcat(1, 0, 0), ca.horzcat(0, ca.cos(a3), -ca.sin(a3)), ca.horzcat(0, ca.sin(a3), ca.cos(a3))
+            rot_y2 = ca.vertcat(
+                ca.horzcat(ca.cos(self.g2s), -ca.sin(self.g2s), 0), ca.horzcat(ca.sin(self.g2s), ca.cos(self.g2s), 0), ca.horzcat(0, 0, 1)
             )
-            rot_e4r4 = ca.vertcat(
-                ca.horzcat(1, 0, 0), ca.horzcat(0, ca.cos(a4), -ca.sin(a4)), ca.horzcat(0, ca.sin(a4), ca.cos(a4))
+            rot_y3 = ca.vertcat(
+                ca.horzcat(ca.cos(self.g3s), -ca.sin(self.g3s), 0), ca.horzcat(ca.sin(self.g3s), ca.cos(self.g3s), 0), ca.horzcat(0, 0, 1)
+            )
+            rot_y4 = ca.vertcat(
+                ca.horzcat(ca.cos(self.g4s), -ca.sin(self.g4s), 0), ca.horzcat(ca.sin(self.g4s), ca.cos(self.g4s), 0), ca.horzcat(0, 0, 1)
             )
         else:
             rot_e1r1 = ca.SX.eye(3);

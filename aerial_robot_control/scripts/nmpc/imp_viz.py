@@ -239,6 +239,17 @@ class Visualizer:
         plt.ylabel("Estimated Torque (Nm)")
         plt.grid(True)
 
+         # Plot End Effector Position
+        # plt.subplot(ceil(n_plots/2), 2, 10)
+        # plt.plot(time_data_x, r_sim_all[:self.data_idx, 15], 'c', label="x_ee")
+        # plt.plot(time_data_x, r_sim_all[:self.data_idx, 16], 'm', label="y_ee")
+        # plt.plot(time_data_x, r_sim_all[:self.data_idx, 17], 'y', label="z_ee")
+        # plt.legend(framealpha=legend_alpha)
+        # plt.xlabel("Time (s)")
+        # plt.xlim([0, t_total_sim])
+        # plt.ylabel("End Effector Position (m)")
+        # plt.grid(True)
+
        
 
         # Plot Servo Angle as State
@@ -392,10 +403,11 @@ class Visualizer:
             plt.ylabel("Disturbance Force on End Effector (N)")
             plt.grid(True)
 
-        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-        fig2 = plt.figure(figsize=(20, 15))
-        plt.plot(x_sim_all[1200:self.data_idx, 1], x_sim_all[1200:self.data_idx, 2], 'r', label="real")
-        plt.plot(r_sim_all[1200:self.data_idx, 1], r_sim_all[1200:self.data_idx, 2], 'b', label="target")
+        # plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        # fig2 = plt.figure(figsize=(20, 15))
+        # plt.plot(x_sim_all[1250:self.data_idx, 1], x_sim_all[1250:self.data_idx, 2], 'r', label="real")
+        # plt.plot(r_sim_all[1250:self.data_idx, 1], r_sim_all[1250:self.data_idx, 2], 'b', label="target")
+        # plt.plot(r_sim_all[1250:self.data_idx, 16], r_sim_all[1250:self.data_idx, 17], 'g', label="real_ee")
         plt.show()
 
     def visualize_less(self, ts_sim: float, t_total_sim: float):

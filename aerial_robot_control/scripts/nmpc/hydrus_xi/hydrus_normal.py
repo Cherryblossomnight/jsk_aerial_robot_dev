@@ -6,7 +6,7 @@ from hydrus_base import HydrusBase
 from tilt_qd import phys_param_beetle_omni as phys_omni
 
 
-class HydrusThrust(HydrusBase):
+class HydrusNormal(HydrusBase):
     """
     Controller Name: Tiltable Quadrotor NMPC including Servo and Thrust Model
     The controller itself is constructed in base class. This file is used to define the properties
@@ -17,21 +17,21 @@ class HydrusThrust(HydrusBase):
     """
     def __init__(self, overwrite: bool = False, phys=phys_omni):
         # Model name
-        self.model_name = "hydrus_thrust"
+        self.model_name = "hydrus_normal"
         self.phys = phys
 
         self.tilt = False
         self.include_servo_model = True
         self.include_servo_derivative = False
-        self.include_servo_dynamic = True
+        self.include_servo_dynamic = False
         self.include_thrust_model = False   # TODO extend to include_thrust_derivative
-        self.include_cog_dist_model = True
+        self.include_cog_dist_model = False
         self.include_cog_dist_parameter = False
         self.include_impedance = False
-        self.include_end_effector_dist_model = True
+        self.include_end_effector_dist_model = False
 
         # Read parameters from configuration file in the robot's package
-        self.read_params("controller", "nmpc", "beetle", "BeetleNMPCFull.yaml")
+        self.read_params("controller", "nmpc", "hydrus", "quad/default_mode_201907/HydrusNMPC.yaml")
 
         # Create acados model & solver and generate c code
         super().__init__(overwrite)
@@ -54,15 +54,11 @@ class HydrusThrust(HydrusBase):
             qe_z + self.qzr,
             self.w,
             self.j_s,
-            self.w_s,
-            self.fds_w,
-            self.tau_ds_b,
-            self.fde_w,
         )
 
         state_y_e = state_y
 
-        control_y = ca.vertcat(self.ft_c, self.j_c)
+        control_y = ca.vertcat(self.ft_c)
 
         return state_y, state_y_e, control_y
 
@@ -83,41 +79,26 @@ class HydrusThrust(HydrusBase):
                 self.params["Qw_xy"],
                 self.params["Qw_xy"],
                 self.params["Qw_z"],
-                self.params["Qj1"],
-                self.params["Qj2"],
-                self.params["Qj3"], # joint angles
-                self.params["Qw1"],
-                self.params["Qw2"],
-                self.params["Qw3"], # joint velocities
-                1,
-                1,
-                1, 
-                1,
-                1,
-                1, # disturbance
-                1,
-                1,
-                1, # end_effector
+                0,
+                0,
+                0,
             ]
         )
         print("Q: \n", Q)
 
         R = np.diag(
             [
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
+                self.params["Rt"],
+                self.params["Rt"],
+                self.params["Rt"],
+                self.params["Rt"],
             ]
         )
         print("R: \n", R)
 
         return Q, R
 
-    def get_reference(self, target_xyz, target_qwxyz):
+    def get_reference(self, target_xyz, target_qwxyz, target_vxyz, target_wrpy):
         """
         Assemble reference trajectory from target pose and reference control values.
         Gets called from reference generator class.
@@ -140,16 +121,26 @@ class HydrusThrust(HydrusBase):
         xr[:, 0] = target_xyz[0]       # x
         xr[:, 1] = target_xyz[1]       # y
         xr[:, 2] = target_xyz[2]       # z
-        # No reference for vx, vy, vz (idx: 3, 4, 5)
+        xr[:, 3] = target_vxyz[0]       # vx
+        xr[:, 4] = target_vxyz[1]       # vy
+        xr[:, 5] = target_vxyz[2]       # vz
         xr[:, 6] = target_qwxyz[0]     # qx
         xr[:, 7] = target_qwxyz[1]     # qx
         xr[:, 8] = target_qwxyz[2]     # qy
         xr[:, 9] = target_qwxyz[3]     # qz
-        # No reference for wx, wy, wz (idx: 10, 11, 12)
+        xr[:, 10] = target_wrpy[0]     # wr
+        xr[:, 11] = target_wrpy[1]     # wp
+        xr[:, 12] = target_wrpy[2]     # wy
 
+   
+        #print(xr)
         # Assemble control reference
         # Note: Reference has to be zero if variable is included as state in cost function!
         ur = np.zeros([nn, nu])
+        ur[:, 0] = self.phys.m * self.phys.gravity / 4
+        ur[:, 1] = self.phys.m * self.phys.gravity / 4
+        ur[:, 2] = self.phys.m * self.phys.gravity / 4
+        ur[:, 3] = self.phys.m * self.phys.gravity / 4
         # ur[:, 0] = ft_ref[0]
         # ur[:, 1] = ft_ref[1]
         # ur[:, 2] = ft_ref[2]
@@ -160,7 +151,7 @@ class HydrusThrust(HydrusBase):
 
 if __name__ == "__main__":
     overwrite = False
-    pid = HydrusThrust(overwrite)
+    pid = HydrusNormal(overwrite)
 
     # print("Successfully initialized acados ocp: ", acados_ocp_solver.acados_ocp)
     # print("number of states: ", acados_ocp_solver.acados_ocp.dims.nx)

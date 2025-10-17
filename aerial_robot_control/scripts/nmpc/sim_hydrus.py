@@ -12,7 +12,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_qd")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/hydrus")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/archive")
 
-from pid_viz import Visualizer
+from imp_viz import Visualizer
 
 # Quadrotor
 import tilt_qd.phys_param_beetle_omni as phys_omni
@@ -21,8 +21,8 @@ import hydrus.phys_param_hydrus as phys_hydrus
 # - Naive models
 from archive.tilt_qd_no_servo_ac_cost import NMPCTiltQdNoServoAcCost
 from tilt_qd.tilt_qd_no_servo import NMPCTiltQdNoServo
-
-
+# Hydrus
+from hydrus.hydrus_normal import HydrusNormal
 from hydrus.hydrus_thrust import HydrusThrust
 # - Consider the servo delay with its model
 from tilt_qd.tilt_qd_servo import NMPCTiltQdServo
@@ -56,18 +56,9 @@ def main(args):
     if args.arch == 'qd':
 
         if args.model == 0:
-            nmpc = HydrusThrust(phys=phys_hydrus)
+            nmpc = HydrusNormal(phys=phys_hydrus)
         elif args.model == 1:
-            nmpc = NMPCTiltQdServo(phys=phys_art)
-        elif args.model == 2:
-            nmpc = NMPCTiltQdThrust(phys=phys_art)
-        elif args.model == 3:
-            nmpc = NMPCTiltQdServoThrust(phys=phys_art)
-
-        elif args.model == 21:
-            nmpc = NMPCTiltQdServoDist(phys=phys_omni)
-        elif args.model == 22:
-            nmpc = NMPCTiltQdServoThrustDist(phys=phys_omni)
+            nmpc = HydrusThrust(phys=phys_hydrus)
 
         # Archived methods
         elif args.model == 91:
@@ -124,8 +115,7 @@ def main(args):
     x_init[6] = 1.0  # qw
     x_init[13:16] = [np.pi/2, np.pi/2, np.pi/2]   # joint angles state
     u_init = np.zeros(nu)
-    u_init[0:4] = [0.0, 0.0, 0.0, 0.0]  # thrust
-    u_init[4:7] = [np.pi/2, np.pi/2, np.pi/2]   # joint angles command
+    u_init[0:4] = [0.0, 0.0, 0.0, 0.0]  # thrust 
 
     for stage in range(ocp_solver.N + 1):
         ocp_solver.set(stage, "x", x_init)
@@ -134,7 +124,11 @@ def main(args):
 
     # ---------- Simulator ----------
     if args.arch == 'qd':
-        sim_nmpc = HydrusThrust(phys=phys_hydrus)
+        if args.sim_model == 0:
+            sim_nmpc = HydrusNormal(phys=phys_hydrus)  # Consider both the servo delay and the thrust delay
+        elif args.sim_model == 1:
+            sim_nmpc = HydrusThrust(phys=phys_hydrus) 
+    
         # sim_phy = phys_omni if 20 < args.model < 30 else phys_art
         # if args.sim_model == 0:
         #     sim_nmpc = NMPCTiltQdServoThrust(phys=sim_phy)  # Consider both the servo delay and the thrust delay
@@ -171,7 +165,7 @@ def main(args):
 
     ts_sim = 0.005  # or 0.001
 
-    t_total_sim = 15.0
+    t_total_sim = 24.0
     if args.plot_type == 1:
         t_total_sim = 4.0
     if args.plot_type == 2:
@@ -183,8 +177,8 @@ def main(args):
     # Sim solver
     sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, is_build=True)
     nx_sim = sim_solver.acados_sim.dims.nx
-    nr = 15
-    r_init = [0.3, 0.6, 1.0, 0.0, 0.0, 0.0, np.pi/2, np.pi/2, np.pi/2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    nr = 18
+    r_init = [0.3, 0.6, 1.0, 0.0, 0.0, 0.0, np.pi/2, np.pi/2, np.pi/2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     # State Initialization
     x_init_sim = np.zeros(nx_sim)
     x_init_sim[6] = 1.0  # qw
@@ -218,7 +212,6 @@ def main(args):
     t_sqp_end = 3.0
 
     # ========== Run simulation ==========
-
     u_cmd = u_init
     t_ctl = 0.0
     x_now_sim = x_init_sim
@@ -239,7 +232,7 @@ def main(args):
     target_prpy = np.array([[0.0, 0.0, 0.0]]).T
     xd_ddot = 0.0
     xd_dot = 0.0
-    xd = 0.90466333
+    xd = 1.03923048
 
     xref = xd
     yd_ddot = 0.0
@@ -253,6 +246,7 @@ def main(args):
     last_err = 0.0
     last_q = u_cmd[4:7]
     sim_start = False
+    collision = False
     for i in range(N_sim):
         # --------- Update time ---------
         t_now = i * ts_sim
@@ -284,7 +278,7 @@ def main(args):
         # -------- Update control target --------
         target_xyz = np.array([[0.0, 0.0, 2.0]]).T
         target_rpy = np.array([[0.0, 0.0, 0.0]]).T
-        # target_vxyz = np.array([[0.0, 0.0, 0.0]]).T
+        target_vxyz = np.array([[0.0, 0.0, 0.0]]).T
         # target_wxyz = np.array([[0.0, 0.0, 0.0]]).T
         if args.plot_type == 2:
             #target_xyz = np.array([[1.0, 1.5, 2.0]]).T
@@ -306,37 +300,55 @@ def main(args):
             #     assert t_sqp_end <= 3.0
             #     target_xyz = np.array([[1.0, 1.0, 1.0]]).T
             #     target_rpy = np.array([[0.0, 0.0, 0.0]]).T
-            if t_now >= 6:
+            if t_now >= 4 and t_now < 10:
             #     target_xyz = np.array([[1.0, 1.0, 1.0]]).T
                
-                if not cmd:
-                    u_cmd[4:7] = [np.pi/3, np.pi/3, -np.pi/6]
-                    cmd = True
+              
+                #u_cmd[4:7] = [np.pi/3, np.pi/3, -np.pi/6]
+                target_rpy = np.array([[0.0, 0.0, -np.pi/6]]).T
+                target_xyz = np.array([[0.0, 0.0, 2.0]]).T
+            #if t_now >= 10:
+                #target_rpy = np.array([[roll, pitch, -x_now_sim[14]-x_now_sim[15]]]).T
+                 
                 #target_xyz = np.array([[1.0, 1.5, 2]]).T
                 #target_rpy = np.array([[0.0, 0.0, 0.0]]).T
-            if t_now >= 7:
-                target_rpy = np.array([[roll, pitch, -x_now_sim[14]-x_now_sim[15]]]).T
+            
+               # target_rpy = np.array([[roll, pitch, -x_now_sim[14]-x_now_sim[15]]]).T
             #     roll = 30.0 / 180.0 * np.pi
             #     pitch = 0.0 / 180.0 * np.pi
             #     yaw = 0.0 / 180.0 * np.pi
             #     target_rpy = np.array([[roll, pitch, yaw]]).T
 
-            if t_now >= 10:
-                target_xyz = np.array([[0.0, 0.0, 2.0]]).T
+
+            
             #     assert t_sqp_end <= 3.0
                 # if np.sqrt((y_target-x_now_sim[1])**2 + (z_target-x_now_sim[2])**2) < 0.1:
                 #     t_ctrl += ts_sim
                 #y_target = 0.5 * np.cos(np.pi/3*(t_now-6))
                 #z_target = 2 + 0.8 * np.sin(np.pi/3*(t_now-6))
+            if t_now >= 8.0:
+                target_xyz = np.array([[1.0, 0.5, 2.0]]).T
+                target_rpy = np.array([[0.0, 0.0, -np.pi/6]]).T
+               # target_rpy = np.array([[roll, pitch, -x_now_sim[14]-x_now_sim[15]]]).T
+            # if t_now >= 13.0:
+            #     x_now_sim[25:28] = [0.0, 0.0, 0.0]
+      
 
-                x_now_sim[25:28] = [5.0, 0.0, 0.0]
+            
+            # if  x_now_sim[3] > 0:
+            #     collision = False
             # if t_now >= 14:
             #     x_now_sim[25:28] = [-3.0, 0.0, 0.0]
             # if t_now >= 18:
             #     x_now_sim[25:28] = [-2.0, 0.0, 0.0]
-            # if t_now >= 22:
+            if t_now >= 12.5:
             #     x_now_sim[25:28] = [-1.0, 0.0, 0.0]
-                # target_xyz = np.array([[0.0, y_target, z_target]]).T
+                y_target = 0.5 * np.cos(np.pi/3*(t_now-12.5))
+                z_target = 2 + 0.8 * np.sin(np.pi/3*(t_now-12.5))
+                vy_target = -0.5*np.pi/3*np.sin(np.pi/3*(t_now-12.5))
+                vz_target = 0.8*np.pi/3*np.cos(np.pi/3*(t_now-12.5))
+                target_xyz = np.array([[1.0, y_target, z_target]]).T
+                target_vxyz = np.array([[0.0,vy_target, vz_target]]).T
                 # target_rpy = np.array([[target_roll, target_pitch, 0.0]]).T
                 # target_vxyz = (target_xyz - target_pxyz)/ ts_sim
                 # target_wxyz = (target_rpy - target_prpy)/ ts_sim
@@ -403,7 +415,7 @@ def main(args):
             # if est_external_wrench[0] > 3 or est_external_wrench[0] < -3:
             #     mdx = np.abs(1 * est_external_wrench[0])
             # else:
-            mdx = 10.0
+            mdx = 5.0
             # if est_external_wrench[1] > 5:
             #     mdy = 1 * est_external_wrench[1]
             # else:
@@ -413,16 +425,15 @@ def main(args):
             #else:
             mdz = 5.0
             # calcaluate the translation acceleration
-            x_acc = ( - 1/m) * est_external_wrench[0] + 2.0*(target_xyz[0,0]-x_now[0]) + 2*0.7*np.sqrt(2.0)*(0.0-x_now[3])
-            y_acc = (1/mdy - 1/m) * est_external_wrench[1] + 2.0*(target_xyz[1,0]-x_now[1]) + 2*0.7*np.sqrt(2.0)*(0.0-x_now[4])
-            z_acc = (1/mdz - 1/m) * est_external_wrench[2] + 8.0*(target_xyz[2,0]-x_now[2]) + 2*1.0*np.sqrt(8.0)*(0.0-x_now[5]) + 9.798
+            x_acc = (1/mdx - 1/m) * est_external_wrench[0] + 2.0*(target_xyz[0,0]-x_now[0]) + 2*1.4*np.sqrt(2.0)*(target_vxyz[0,0]-x_now[3])
+            y_acc = (1/mdy - 1/m) * est_external_wrench[1] + 2.0*(target_xyz[1,0]-x_now[1]) + 2*1.4*np.sqrt(2.0)*(target_vxyz[1,0]-x_now[4])
+            z_acc = (1/mdz - 1/m) * est_external_wrench[2] + 3.0*(target_xyz[2,0]-x_now[2]) + 2*1.2*np.sqrt(3.0)*(target_vxyz[2,0]-x_now[5]) + 9.798
             # x_acc = 1.0*(target_xyz[0,0]-x_now[0]) + 1.6*(0.0-x_now[3])
             # y_acc = 1.0*(target_xyz[1,0]-x_now[1]) + 1.6*(0.0-x_now[4])
             # z_acc = 8.0*(target_xyz[2,0]-x_now[2]) + 5.0*(0.0-x_now[5]) + 9.798
             
             if target_xyz[2,0] > 0 and take_off == False:
                 take_off = True
-                take_off_i = i
             if take_off == False:
                 z_acc = 0.0
             else:
@@ -436,23 +447,25 @@ def main(args):
             real_x_acc = (np.tan(roll)*np.sin(yaw) + np.tan(pitch)*np.cos(yaw)) * z_acc
             real_y_acc = (-np.tan(roll)*np.cos(yaw) + np.tan(pitch)*np.sin(yaw)) * z_acc
             I = nmpc.get_I_matrix(nmpc.acados_init_p[4:30], x_now)
-            I_d = np.matrix([[2, 0.0, 0.0],
-                             [0.0, 2, 0.0],
-                             [0.0, 0.0, 4]])
+            I_d = np.matrix([[0.6, 0.0, 0.0],
+                             [0.0, 0.6, 0.0],
+                             [0.0, 0.0, 0.4]])
             I_d = I
-            Kp = np.matrix([[20.0, 0.0, 0.0],
-                            [0.0, 20.0, 0.0],
-                            [0.0, 0.0, 4.0]])
-            Kd = np.matrix([[2*0.5*np.sqrt(20*2), 0.0, 0.0],
-                            [0.0, 2*0.5*np.sqrt(20*2), 0.0],
-                            [0.0, 0.0, 2*0.5*np.sqrt(4*4)]])
+            Kp = np.matrix([[60.0, 0.0, 0.0],
+                            [0.0, 60.0, 0.0],
+                            [0.0, 0.0, 10.0]])
+            Kd = np.matrix([[2*1.2*np.sqrt(60), 0.0, 0.0],
+                            [0.0, 2*1.2*np.sqrt(60), 0.0],
+                            [0.0, 0.0, 2*0.5*np.sqrt(10)]])
             ko = np.matrix(np.diag([6.0, 6.0, 6.0, 4.5, 4.5, 4.5]))
+            if t_now >= 10.5:
+                ko = np.matrix(np.diag([6.0, 6.0, 6.0, 4.5, 4.5, 4.5]))
             delta_x = np.array([target_roll-roll, target_pitch-pitch, target_rpy[2,0]-yaw])
             delta_v = np.array([0.0-x_now[10], 0.0-x_now[11], 0.0-x_now[12]])
     
             c_vector = nmpc.get_c_vector(nmpc.acados_init_p[4:30], x_now)
             # calcaluate the command torque
-            torque = ((I * I_d.I - np.eye(3)) @ est_external_wrench[3:6]).reshape(3, 1) + (Kp @ delta_x + Kd @ delta_v).reshape(3, 1) 
+            torque = ((I * I_d.I - np.eye(3)) @ est_external_wrench[3:6]).reshape(3, 1) + I @ (Kp @ delta_x + Kd @ delta_v).reshape(3, 1) 
             #torque = (Kp @ delta_x + Kd @ delta_v).reshape(3, 1) 
             # print((I * I_d.I - np.eye(3)) @ x_now_sim[19:22])
             # print((Kp @ delta_x + Kd @ delta_v))
@@ -488,81 +501,35 @@ def main(args):
         # Now xr_ddot = 0, xr_ddot = 0
         # Fext is get from the external force acting on the end effector
 
-            if t_now >= 10:
-                Ma = 5
-                Ca = 2*0.35*np.sqrt(750)
-                Ka = 150
+            # if t_now >= 10:
+            #     Ma = 5
+            #     Ca = 2*0.35*np.sqrt(75)
+            #     Ka = 15
 
-                xd_ddot = (x_now_sim[25]*np.cos(yaw) + x_now_sim[26]*np.sin(yaw) - Ka * (xd - xref) - Ca * xd_dot) / Ma
-                yd_ddot = (-x_now_sim[25]*np.sin(yaw) + x_now_sim[26]*np.cos(yaw)  - Ka * (yd - yref) - Ca * yd_dot) / Ma
-                xd += xd_dot * ts_sim
-                yd += yd_dot * ts_sim
-                pd = np.array([[xd, yd, 0.0]]).T
+            #     xd_ddot = (x_now_sim[25] - Ka * (xd - xref) - Ca * xd_dot) / Ma
+            #     #yd_ddot = (-x_now_sim[25]*np.sin(yaw) + x_now_sim[26]*np.cos(yaw)  - Ka * (yd - yref) - Ca * yd_dot) / Ma
+            #     yd_ddot = 0.0
+            #     xd += xd_dot * ts_sim
+            #     yd += yd_dot * ts_sim
+            #     pd = np.array([[xd, 0.0, 0.0]]).T
                 
-                xd_dot += xd_ddot * ts_sim
-                yd_dot += yd_ddot * ts_sim 
-                # Differential inverse kinematics
-                x_sim = x_now
-                x_sim[13:16] = last_q
-                pe_cog_tar = [xd, yd, pe_cog[2]]
-                print("pe_cog_tar: ",pe_cog_tar)
-                if not sim_start:
-                    pe_cog_sim = pe_cog
-                    sim_start = True
-                    print("pe_cog_sim: ",pe_cog_sim)
-                print("x_sim[13:16]: ", x_sim[13:16])
-                x_sim[13:16] = nmpc.inv_kinematics(nmpc.acados_init_p[4:30], x_sim, pe_cog_tar)
-                #print("yaw: ", yaw)
-                # x_sim[13:16] += np.squeeze(np.asarray(delta_q))
-                pe_cog_sim, pe_world_sim = nmpc.get_end_effector_position(nmpc.acados_init_p[4:30], x_sim)  
-                # iter = 0 
-                # while True:
-                #     if iter == 0:
-                #         print("x_sim: ", x_sim[13:16])
-                #         print("pe_cog_sim: ", pe_cog_sim,"pe_world_tar: ", pe_cog_tar,np.sqrt((pe_cog_sim[0]-pe_cog_tar[0])**2 + (pe_cog_sim[1]-pe_cog_tar[1])**2))
-                #     if np.sqrt((pe_cog_sim[0]-pe_cog_tar[0])**2 + (pe_cog_sim[1]-pe_cog_tar[1])**2) < 1e-3:
-                #         print("break")
-                #         #u_cmd[4:7] = x_sim[13:16]
-                #         break
-                #     jacobian = nmpc.get_end_Jacobian(nmpc.acados_init_p[4:30], x_sim)
-                  
-                   
-                #     # print("dv:", d_v)
-                #     # print("dq:",delta_q.T)
-                #     #print("x_sim: ", x_sim[13:16])
-                #     pe_cog_sim, pe_world_sim = nmpc.get_end_effector_position(nmpc.acados_init_p[4:30], x_now)  
-               
-                #     #if last_err < np.sqrt((pe_world_sim[0]-pe_world_tar[0])**2 + (pe_world_sim[1]-pe_world_tar[1])**2):
-                #         #last_err = np.sqrt((pe_world_sim[0]-pe_world_tar[0])**2 + (pe_world_sim[1]-pe_world_tar[1])**2)
-                   
-                #     #     delta_q = np.linalg.pinv(jacobian) @ (lam * d_v)
-                #     #     x_sim[13:16] += np.squeeze(np.asarray(delta_q))
-                #     #     pe_cog_sim, pe_world_sim = nmpc.get_end_effector_position(nmpc.acados_init_p[4:30], x_now)  
-                #     # lam = 1.0
-                #     #print(jacobian)
-                #    #print(np.linalg.pinv(jacobian))
-                #     #print(d_v)
-                #     #print(delta_q)
-                #     #print("---")
-                #     #print("pe_world_tar: ", pe_world_tar,"pe_world_sim: ", pe_world_sim," ",np.sqrt((pe_world_sim[0]-pe_world_tar[0])**2 + (pe_world_sim[1]-pe_world_tar[1])**2))
-                #     #print(np.sqrt((pe_world_sim[0]-pe_world_tar[0])**2 + (pe_world_sim[1]-pe_world_tar[1])**2))
-                #     iter += 1 
-                #     #print("pe_cog_sim: ", pe_cog_sim,"pe_cog_tar: ", pe_cog_tar,np.sqrt((pe_cog_sim[0]-pe_cog_tar[0])**2 + (pe_cog_sim[1]-pe_cog_tar[1])**2))
-                #     if iter > 50:
-                #         print("break iter")
-                        
-                #         break
-                print("pe_world: ", pe_world,"x_now: ", x_now_sim[0:3])
-                print("x_sim: ", x_sim[13:16])
-                print("yaw", yaw)
-                print(np.sqrt((pe_cog_sim[0]-pe_cog_tar[0])**2 + (pe_cog_sim[1]-pe_cog_tar[1])**2))
-                last_q = x_sim[13:16]
-                u_cmd[4:7] = x_sim[13:16]
-                #nmpc.cal_end_effector_position(nmpc.acados_init_p[4:30], x_now)
-                #u_cmd[4:7] += np.squeeze(np.asarray(delta_q))
-                # print("d_v: ", d_v)
-                #print("xd: ", xd, "xf: ", xref)
-                #print(pe_world, "x", x_now_sim[0], "y", x_now_sim[1])
+            #     xd_dot += xd_ddot * ts_sim
+            #     yd_dot += yd_ddot * ts_sim 
+            #     # Differential inverse kinematics
+
+            #     print('xd: ', xd)
+            #     theta = np.arccos(xd / (2 * 0.6))
+            #     print("theta: ", theta)
+            #     u_cmd[4:7] = [np.pi/2 - theta,2 * theta, -theta]
+
+
+
+
+            #     #nmpc.cal_end_effector_position(nmpc.acados_init_p[4:30], x_now)
+            #     #u_cmd[4:7] += np.squeeze(np.asarray(delta_q))
+            #     # print("d_v: ", d_v)
+            #     #print("xd: ", xd, "xf: ", xref)
+            #     #print(pe_world, "x", x_now_sim[0], "y", x_now_sim[1])
 
 
 
@@ -579,43 +546,65 @@ def main(args):
             raise Exception(f"acados integrator returned status {status} in closed loop instance {i}")
 
         x_now_sim = sim_solver.get("x")
+
+        ####################wall constraints######################
+        # if t_now >= 8.0:
+        #     pe_cog_sim, pe_world_sim = nmpc.get_end_effector_position(nmpc.acados_init_p[4:30], x_now_sim)  
+        #     fric_ratio = 0.3
+        #     x_cons = 1.99 + pe_world_sim[1]*0.2
+         
+        #     if pe_world_sim[0] >= x_cons:
+        #         contact_force = 800*(x_cons-pe_world_sim[0]) + min(150.0*(0.0-x_now_sim[3]), 0.0)
+        #         friction_force = fric_ratio * contact_force
+        #         friction_force = 0.0
+        #         y_fric = friction_force * (-x_now_sim[4] / (x_now_sim[4]**2 + x_now_sim[5]**2))
+        #         z_fric = friction_force * (-x_now_sim[5] / (x_now_sim[4]**2 + x_now_sim[5]**2))
+        #     else:
+        #         contact_force = 0.0
+        #         friction_force = 0.0
+        #         y_fric = 0.0
+        #         z_fric = 0.0
+
+        #     x_now_sim[25:28] = [contact_force, y_fric, z_fric]
+        ############################################################
+
         # --------- Add state constaints ----------
         # We add a wall here, the equation is y + x - 1 = 0. The drone could enter the area where y + x - 1 > 0
-        p = np.array([x_now_sim[0], x_now_sim[1], x_now_sim[2]]) # position vector
-        v = np.array([x_now_sim[3], x_now_sim[4], x_now_sim[5]]) # velocity vector
-        n = np.array([-np.sqrt(2)/2, -np.sqrt(2)/2, 0.0]) # normal vector
-        # if (v @ n) < 0.0:
-        #     if p[0]+p[1]-1 > 0.0:
-        #         a = (p[0]+p[1]-1)/np.sqrt(2)
-        #         x_now_sim[0] += n[0]*a
-        #         x_now_sim[1] += n[1]*a
-        #         b = -(v @ n) * n
-        #         x_now_sim[3] += b[0]
-        #         x_now_sim[4] += b[1]
+        # p = np.array([x_now_sim[0], x_now_sim[1], x_now_sim[2]]) # position vector
+        # v = np.array([x_now_sim[3], x_now_sim[4], x_now_sim[5]]) # velocity vector
+        # n = np.array([-np.sqrt(2)/2, -np.sqrt(2)/2, 0.0]) # normal vector
+        # # if (v @ n) < 0.0:
+        # #     if p[0]+p[1]-1 > 0.0:
+        # #         a = (p[0]+p[1]-1)/np.sqrt(2)
+        # #         x_now_sim[0] += n[0]*a
+        # #         x_now_sim[1] += n[1]*a
+        # #         b = -(v @ n) * n
+        # #         x_now_sim[3] += b[0]
+        # #         x_now_sim[4] += b[1]
         
         if x_now_sim[5] < 0.0:
             if x_now_sim[2] <= 0.0:
                 x_now_sim[2] = 0.0
                 x_now_sim[5] = 0.0
-        if x_now_sim[13] > np.pi/2:
-            x_now_sim[13] = np.pi/2
-        elif x_now_sim[13] < -np.pi/2:
-            x_now_sim[13] = -np.pi/2
-        if x_now_sim[14] > np.pi/2:
-            x_now_sim[14] = np.pi/2
-        elif x_now_sim[14] < -np.pi/2:
-            x_now_sim[14] = -np.pi/2
-        if x_now_sim[15] > np.pi/2:
-            x_now_sim[15] = np.pi/2
-        elif x_now_sim[15] < -np.pi/2:
-            x_now_sim[15] = -np.pi/2
+        # if x_now_sim[13] > np.pi/2:
+        #     x_now_sim[13] = np.pi/2
+        # elif x_now_sim[13] < -np.pi/2:
+        #     x_now_sim[13] = -np.pi/2
+        # if x_now_sim[14] > np.pi/2:
+        #     x_now_sim[14] = np.pi/2
+        # elif x_now_sim[14] < -np.pi/2:
+        #     x_now_sim[14] = -np.pi/2
+        # if x_now_sim[15] > np.pi/2:
+        #     x_now_sim[15] = np.pi/2
+        # elif x_now_sim[15] < -np.pi/2:
+        #     x_now_sim[15] = -np.pi/2
     
 
 
         # Save current simulation data for later comparison
         x_history.append(x_now_sim.copy())
         u_history.append(u_cmd.copy())
-        r_now = [target_xyz[0,0], target_xyz[1,0], target_xyz[2,0], target_roll, target_pitch, target_rpy[2,0], u_cmd[4], u_cmd[5], u_cmd[6], est_external_wrench_plt[0], est_external_wrench_plt[1], est_external_wrench_plt[2], est_external_wrench_plt[3], est_external_wrench_plt[4], est_external_wrench_plt[5]]
+        r_now = [target_xyz[0,0], target_xyz[1,0], target_xyz[2,0], target_roll, target_pitch, target_rpy[2,0], 0, 0, 0, est_external_wrench_plt[0], est_external_wrench_plt[1], est_external_wrench_plt[2], est_external_wrench_plt[3], est_external_wrench_plt[4], est_external_wrench_plt[5], pe_world_sim[0], pe_world_sim[1], pe_world_sim[2]]
         # --------- Update visualizer ----------
         viz.update(i, x_now_sim, r_now, u_cmd)  # Note: The recording frequency of u_cmd is the same as ts_sim
 

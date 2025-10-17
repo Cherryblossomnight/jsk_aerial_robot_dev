@@ -7,6 +7,7 @@ import argparse
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_bi")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_tri")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_qd")
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/hydrus")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/archive")
 
 from nmpc_viz import Visualizer
@@ -14,6 +15,7 @@ from nmpc_viz import Visualizer
 # Quadrotor
 import tilt_qd.phys_param_beetle_omni as phys_omni
 import archive.phys_param_beetle_art as phys_art
+import hydrus.phys_param_hydrus as phys_hydrus
 
 # - Naive models
 from archive.tilt_qd_no_servo_ac_cost import NMPCTiltQdNoServoAcCost
@@ -58,6 +60,8 @@ def main(args):
             nmpc = NMPCTiltQdThrust(phys=phys_art)
         elif args.model == 3:
             nmpc = NMPCTiltQdServoThrust(phys=phys_art)
+        elif args.model == 4:
+            nmpc = HydrusThrust(phys=phys_hydrus)
 
         elif args.model == 21:
             nmpc = NMPCTiltQdServoDist(phys=phys_omni)
@@ -211,6 +215,7 @@ def main(args):
         # --------- Update time ---------
         t_now = i * ts_sim
         t_ctl += ts_sim
+        print(nmpc.acados_init_p)
 
         # --------- Update state estimation ---------
         # Assemble state from simulation and disturbance estimation 
@@ -312,7 +317,7 @@ def main(args):
             except Exception as e:
                 print(f"Round {i}: acados ocp_solver returned status {ocp_solver.status}. Exiting.")
                 break
-
+   
         comp_time_end = time.time()
         viz.comp_time[i] = comp_time_end - comp_time_start
 
