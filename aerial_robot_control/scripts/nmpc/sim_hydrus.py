@@ -486,6 +486,7 @@ def main(args):
             # print("target_wrench: ", target_wrench) 
             # print("est_external_wrench: ", est_external_wrench)
             mat = nmpc.get_alloc_matrix(nmpc.acados_init_p[4:30], x_now)
+            print(mat)
             delta_u = np.linalg.pinv(mat) @ np.array([z_acc*m, torque[0], torque[1], torque[2]])
             pe_cog, pe_world = nmpc.get_end_effector_position(nmpc.acados_init_p[4:30], x_now)
             # print("yaw: ", yaw)
@@ -572,15 +573,15 @@ def main(args):
         # We add a wall here, the equation is y + x - 1 = 0. The drone could enter the area where y + x - 1 > 0
         # p = np.array([x_now_sim[0], x_now_sim[1], x_now_sim[2]]) # position vector
         # v = np.array([x_now_sim[3], x_now_sim[4], x_now_sim[5]]) # velocity vector
-        # n = np.array([-np.sqrt(2)/2, -np.sqrt(2)/2, 0.0]) # normal vector
-        # # if (v @ n) < 0.0:
-        # #     if p[0]+p[1]-1 > 0.0:
-        # #         a = (p[0]+p[1]-1)/np.sqrt(2)
-        # #         x_now_sim[0] += n[0]*a
-        # #         x_now_sim[1] += n[1]*a
-        # #         b = -(v @ n) * n
-        # #         x_now_sim[3] += b[0]
-        # #         x_now_sim[4] += b[1]
+        # n = np.array([-1, 0.0, 0.0]) # normal vector
+        # if (v @ n) < 0.0:
+        #     if p[0]+p[1]-1 > 0.0:
+        #         a = (p[0]+p[1]-1)/np.sqrt(2)
+        #         x_now_sim[0] += n[0]*a
+        #         x_now_sim[1] += n[1]*a
+        #         b = -(v @ n) * n
+        #         x_now_sim[3] += b[0]
+        #         x_now_sim[4] += b[1]
         
         if x_now_sim[5] < 0.0:
             if x_now_sim[2] <= 0.0:

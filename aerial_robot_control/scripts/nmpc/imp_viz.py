@@ -254,24 +254,24 @@ class Visualizer:
 
         # Plot Servo Angle as State
         x_idx = 12
-        if self.tilt and self.include_servo_model:
-            plt.subplot(ceil(n_plots/2), 2, 7)
-            plt.plot(time_data_x, x_sim_all[:self.data_idx, x_idx+1], label="a1s")
-            plt.plot(time_data_x, x_sim_all[:self.data_idx, x_idx+2], label="a2s")
-            x_idx += 2
-            if self.is_tri or self.is_qd: 
-                plt.plot(time_data_x, x_sim_all[:self.data_idx, x_idx+1], label="a3s")
-                x_idx += 1
-            if self.is_qd: 
-                plt.plot(time_data_x, x_sim_all[:self.data_idx, x_idx+1], label="a4s")
-                x_idx += 1
-            plt.legend(framealpha=legend_alpha)
-            # plt.xlabel("Time (s)")
-            plt.xlim([0, t_total_sim])
-            plt.ylabel("Servo Angle State (rad)")
-            plt.grid(True)
-            if is_plot_sqp:
-                plt.axvspan(t_sqp_start, t_sqp_end, facecolor="orange", alpha=0.2)
+        # if self.tilt and self.include_servo_model:
+        #     plt.subplot(ceil(n_plots/2), 2, 7)
+        #     plt.plot(time_data_x, x_sim_all[:self.data_idx, x_idx+1], label="a1s")
+        #     plt.plot(time_data_x, x_sim_all[:self.data_idx, x_idx+2], label="a2s")
+        #     x_idx += 2
+        #     if self.is_tri or self.is_qd: 
+        #         plt.plot(time_data_x, x_sim_all[:self.data_idx, x_idx+1], label="a3s")
+        #         x_idx += 1
+        #     if self.is_qd: 
+        #         plt.plot(time_data_x, x_sim_all[:self.data_idx, x_idx+1], label="a4s")
+        #         x_idx += 1
+        #     plt.legend(framealpha=legend_alpha)
+        #     # plt.xlabel("Time (s)")
+        #     plt.xlim([0, t_total_sim])
+        #     plt.ylabel("Servo Angle State (rad)")
+        #     plt.grid(True)
+        #     if is_plot_sqp:
+        #         plt.axvspan(t_sqp_start, t_sqp_end, facecolor="orange", alpha=0.2)
 
         # Plot Thrust as State
         if self.include_thrust_model:
@@ -317,16 +317,11 @@ class Visualizer:
 
         # Plot Servo Angle as Control Input
         if self.tilt:
-            if self.include_servo_model:
-                plt.subplot(ceil(n_plots/2), 2, 9)
-            else:
-                plt.subplot(ceil(n_plots/2), 2, 7)
-            plt.plot(time_data_x[1:], u_sim_all[:self.data_idx - 1, u_idx+1], label="a1c")
-            plt.plot(time_data_x[1:], u_sim_all[:self.data_idx - 1, u_idx+2], label="a2c")
-            if self.is_tri or self.is_qd:
-                plt.plot(time_data_x[1:], u_sim_all[:self.data_idx - 1, u_idx+3], label="a3c")
-            if self.is_qd:
-                plt.plot(time_data_x[1:], u_sim_all[:self.data_idx - 1, u_idx+4], label="a4c")
+            plt.subplot(ceil(n_plots/2), 2, 9)
+            plt.plot(time_data_x, x_sim_all[:self.data_idx, 16], label="gimbal1")
+            plt.plot(time_data_x, x_sim_all[:self.data_idx, 17], label="gimbal2")
+            plt.plot(time_data_x, x_sim_all[:self.data_idx, 18], label="gimbal3")   
+            plt.plot(time_data_x, x_sim_all[:self.data_idx, 19], label="gimbal4")
             plt.legend(framealpha=legend_alpha)
             # plt.xlabel("Time (s)")
             plt.xlim([0, t_total_sim])
@@ -407,7 +402,7 @@ class Visualizer:
         # fig2 = plt.figure(figsize=(20, 15))
         # plt.plot(x_sim_all[1250:self.data_idx, 1], x_sim_all[1250:self.data_idx, 2], 'r', label="real")
         # plt.plot(r_sim_all[1250:self.data_idx, 1], r_sim_all[1250:self.data_idx, 2], 'b', label="target")
-        # plt.plot(r_sim_all[1250:self.data_idx, 16], r_sim_all[1250:self.data_idx, 17], 'g', label="real_ee")
+        #plt.plot(r_sim_all[1250:self.data_idx, 16], r_sim_all[1250:self.data_idx, 17], 'g', label="real_ee")
         plt.show()
 
     def visualize_less(self, ts_sim: float, t_total_sim: float):
@@ -472,32 +467,32 @@ class Visualizer:
         plt.legend(framealpha=legend_alpha, ncol=4, bbox_to_anchor=(0.1, 0.75), loc="lower left")
 
         # Plot Sensor Angle as Control Input (in degree)
-        if self.tilt:
-            ax2_right = ax2.twinx()
-            if self.is_bi:
-                ax2_right.plot(time_data_u, u_sim_all[:self.data_idx - 1, 2] * 180 / np.pi, label="$\\alpha_{c1}$",
-                               linestyle="--")
-                ax2_right.plot(time_data_u, u_sim_all[:self.data_idx - 1, 3] * 180 / np.pi, label="$\\alpha_{c2}$",
-                               linestyle="--")
-            if self.is_tri:
-                ax2_right.plot(time_data_u, u_sim_all[:self.data_idx - 1, 3] * 180 / np.pi, label="$\\alpha_{c1}$",
-                               linestyle="--")
-                ax2_right.plot(time_data_u, u_sim_all[:self.data_idx - 1, 4] * 180 / np.pi, label="$\\alpha_{c2}$",
-                               linestyle="--")
-                ax2_right.plot(time_data_u, u_sim_all[:self.data_idx - 1, 5] * 180 / np.pi, label="$\\alpha_{c3}$",
-                               linestyle="--")
-            if self.is_qd:
-                ax2_right.plot(time_data_u, u_sim_all[:self.data_idx - 1, 4] * 180 / np.pi, label="$\\alpha_{c1}$",
-                            linestyle="--")
-                ax2_right.plot(time_data_u, u_sim_all[:self.data_idx - 1, 5] * 180 / np.pi, label="$\\alpha_{c2}$",
-                            linestyle="--")
-                ax2_right.plot(time_data_u, u_sim_all[:self.data_idx - 1, 6] * 180 / np.pi, label="$\\alpha_{c3}$",
-                        linestyle="--")
-                ax2_right.plot(time_data_u, u_sim_all[:self.data_idx - 1, 7] * 180 / np.pi, label="$\\alpha_{c4}$",
-                        linestyle="--")
-            ax2_right.set_ylabel("Servo Angle Cmd. ($^\\circ$)", fontsize=label_size)
-            plt.legend(framealpha=legend_alpha, ncol=4, bbox_to_anchor=(0.1, 0.00), loc="lower left")
-            plt.xlim([-0.1, t_total_sim])
+        # if self.tilt:
+        #     ax2_right = ax2.twinx()
+        #     if self.is_bi:
+        #         ax2_right.plot(time_data_u, u_sim_all[:self.data_idx - 1, 2] * 180 / np.pi, label="$\\alpha_{c1}$",
+        #                        linestyle="--")
+        #         ax2_right.plot(time_data_u, u_sim_all[:self.data_idx - 1, 3] * 180 / np.pi, label="$\\alpha_{c2}$",
+        #                        linestyle="--")
+        #     if self.is_tri:
+        #         ax2_right.plot(time_data_u, u_sim_all[:self.data_idx - 1, 3] * 180 / np.pi, label="$\\alpha_{c1}$",
+        #                        linestyle="--")
+        #         ax2_right.plot(time_data_u, u_sim_all[:self.data_idx - 1, 4] * 180 / np.pi, label="$\\alpha_{c2}$",
+        #                        linestyle="--")
+        #         ax2_right.plot(time_data_u, u_sim_all[:self.data_idx - 1, 5] * 180 / np.pi, label="$\\alpha_{c3}$",
+        #                        linestyle="--")
+        #     if self.is_qd:
+        #         ax2_right.plot(time_data_u, u_sim_all[:self.data_idx - 1, 4] * 180 / np.pi, label="$\\alpha_{c1}$",
+        #                     linestyle="--")
+        #         ax2_right.plot(time_data_u, u_sim_all[:self.data_idx - 1, 5] * 180 / np.pi, label="$\\alpha_{c2}$",
+        #                     linestyle="--")
+        #         ax2_right.plot(time_data_u, u_sim_all[:self.data_idx - 1, 6] * 180 / np.pi, label="$\\alpha_{c3}$",
+        #                 linestyle="--")
+        #         ax2_right.plot(time_data_u, u_sim_all[:self.data_idx - 1, 7] * 180 / np.pi, label="$\\alpha_{c4}$",
+        #                 linestyle="--")
+        #     ax2_right.set_ylabel("Servo Angle Cmd. ($^\\circ$)", fontsize=label_size)
+        #     plt.legend(framealpha=legend_alpha, ncol=4, bbox_to_anchor=(0.1, 0.00), loc="lower left")
+        #     plt.xlim([-0.1, t_total_sim])
             # plt.ylim([-1.0, 1.0])  # -0.8, 0.8; -1.6, 1.6
 
         # plt.tight_layout(rect=[0, 0.03, 1, 0.95])

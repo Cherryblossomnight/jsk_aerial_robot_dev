@@ -5,7 +5,7 @@ import rospkg
 # Read parameters from configuration file in the robot's package
 rospack = rospkg.RosPack()
 
-physical_param_path = os.path.join(rospack.get_path("hydrus"), "config", "quad/default_mode_201907/PhysParamHydrus.yaml")
+physical_param_path = os.path.join(rospack.get_path("hydrus_xi"), "config", "quad/PhysParamHydrusXi.yaml")
 with open(physical_param_path, "r") as f:
     physical_param_dict = yaml.load(f, Loader=yaml.FullLoader)
 physical_params = physical_param_dict["physical"]

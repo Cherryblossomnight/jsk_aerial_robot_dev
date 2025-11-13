@@ -2,11 +2,11 @@
 # -*- encoding: ascii -*-
 import numpy as np
 import casadi as ca
-from hydrus_base import HydrusBase
+from hydrus_xi_base import HydrusXiBase
 from tilt_qd import phys_param_beetle_omni as phys_omni
 
 
-class HydrusNormal(HydrusBase):
+class HydrusXiNormal(HydrusXiBase):
     """
     Controller Name: Tiltable Quadrotor NMPC including Servo and Thrust Model
     The controller itself is constructed in base class. This file is used to define the properties
@@ -17,10 +17,10 @@ class HydrusNormal(HydrusBase):
     """
     def __init__(self, overwrite: bool = False, phys=phys_omni):
         # Model name
-        self.model_name = "hydrus_normal"
+        self.model_name = "hydrus_xi_normal"
         self.phys = phys
 
-        self.tilt = False
+        self.tilt = True
         self.include_servo_model = True
         self.include_servo_derivative = False
         self.include_servo_dynamic = False
@@ -31,7 +31,7 @@ class HydrusNormal(HydrusBase):
         self.include_end_effector_dist_model = False
 
         # Read parameters from configuration file in the robot's package
-        self.read_params("controller", "nmpc", "hydrus", "quad/default_mode_201907/HydrusNMPC.yaml")
+        self.read_params("controller", "nmpc", "hydrus_xi", "quad/HydrusXiNMPC.yaml")
 
         # Create acados model & solver and generate c code
         super().__init__(overwrite)
@@ -54,11 +54,12 @@ class HydrusNormal(HydrusBase):
             qe_z + self.qzr,
             self.w,
             self.j_s,
+            self.g_s
         )
 
         state_y_e = state_y
 
-        control_y = ca.vertcat(self.ft_c)
+        control_y = ca.vertcat(self.ft_c, self.g_c)
 
         return state_y, state_y_e, control_y
 
@@ -82,6 +83,10 @@ class HydrusNormal(HydrusBase):
                 0,
                 0,
                 0,
+                self.params["Qg"],
+                self.params["Qg"],
+                self.params["Qg"],
+                self.params["Qg"],
             ]
         )
         print("Q: \n", Q)
@@ -92,13 +97,17 @@ class HydrusNormal(HydrusBase):
                 self.params["Rt"],
                 self.params["Rt"],
                 self.params["Rt"],
+                self.params["Rg"],
+                self.params["Rg"],
+                self.params["Rg"],
+                self.params["Rg"],
             ]
         )
         print("R: \n", R)
 
         return Q, R
 
-    def get_reference(self, target_xyz, target_qwxyz, target_vxyz, target_wrpy):
+    def get_reference(self, target_xyz, target_qwxyz, target_vxyz, target_wrpy, target_joint_angles, target_gimbal_angles, ft_ref):
         """
         Assemble reference trajectory from target pose and reference control values.
         Gets called from reference generator class.
@@ -132,26 +141,43 @@ class HydrusNormal(HydrusBase):
         xr[:, 11] = target_wrpy[1]     # wp
         xr[:, 12] = target_wrpy[2]     # wy
 
+        xr[:, 13] = target_joint_angles[0]   # joint angle 1
+        xr[:, 14] = target_joint_angles[1]   # joint angle 2
+        xr[:, 15] = target_joint_angles[2]   # joint angle 3
+
+        xr[:, 16] = target_gimbal_angles[0]   # gimbal angle 1
+        xr[:, 17] = target_gimbal_angles[1]   # gimbal angle 2
+        xr[:, 18] = target_gimbal_angles[2]   # gimbal angle 3
+        xr[:, 19] = target_gimbal_angles[3]   # gimbal angle 4  
    
         #print(xr)
         # Assemble control reference
         # Note: Reference has to be zero if variable is included as state in cost function!
         ur = np.zeros([nn, nu])
-        ur[:, 0] = self.phys.m * self.phys.gravity / 4
-        ur[:, 1] = self.phys.m * self.phys.gravity / 4
-        ur[:, 2] = self.phys.m * self.phys.gravity / 4
-        ur[:, 3] = self.phys.m * self.phys.gravity / 4
-        # ur[:, 0] = ft_ref[0]
-        # ur[:, 1] = ft_ref[1]
-        # ur[:, 2] = ft_ref[2]
-        # ur[:, 3] = ft_ref[3]
+        # ur[:, 0] = self.phys.m * self.phys.gravity / 4
+        # ur[:, 1] = self.phys.m * self.phys.gravity / 4
+        # ur[:, 2] = self.phys.m * self.phys.gravity / 4
+        # ur[:, 3] = self.phys.m * self.phys.gravity / 4
+        # ur[:, 4] = target_gimbal_angles[0]
+        # ur[:, 5] = target_gimbal_angles[1]
+        # ur[:, 6] = target_gimbal_angles[2]
+        # ur[:, 7] = target_gimbal_angles[3]
+        ur[:, 0] = ft_ref[0]
+        ur[:, 1] = ft_ref[1]
+        ur[:, 2] = ft_ref[2]
+        ur[:, 3] = ft_ref[3]
+
+        ur[:, 4] = np.pi
+        ur[:, 5] = 0.0
+        ur[:, 6] = np.pi
+        ur[:, 7] = 0.0
         
         return xr, ur
 
 
 if __name__ == "__main__":
     overwrite = False
-    pid = HydrusNormal(overwrite)
+    pid = HydrusXiNormal(overwrite)
 
     # print("Successfully initialized acados ocp: ", acados_ocp_solver.acados_ocp)
     # print("number of states: ", acados_ocp_solver.acados_ocp.dims.nx)

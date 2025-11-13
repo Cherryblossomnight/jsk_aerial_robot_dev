@@ -4,13 +4,12 @@ import time
 import numpy as np
 import argparse
 from tf.transformations import euler_from_quaternion
-from tf.transformations import quaternion_from_euler
 from tf.transformations import quaternion_matrix
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_bi")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_tri")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_qd")
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/hydrus")
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/hydrus_xi")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/archive")
 
 from imp_viz import Visualizer
@@ -18,13 +17,13 @@ from imp_viz import Visualizer
 # Quadrotor
 import tilt_qd.phys_param_beetle_omni as phys_omni
 import archive.phys_param_beetle_art as phys_art
-import hydrus.phys_param_hydrus as phys_hydrus
+import hydrus_xi.phys_param_hydrus_xi as phys_hydrus_xi
 # - Naive models
 from archive.tilt_qd_no_servo_ac_cost import NMPCTiltQdNoServoAcCost
 from tilt_qd.tilt_qd_no_servo import NMPCTiltQdNoServo
 # Hydrus
-from hydrus.hydrus_normal import HydrusNormal
-from hydrus.hydrus_thrust import HydrusThrust
+from hydrus_xi.hydrus_xi_normal import HydrusXiNormal
+#from hydrus_xi.hydrus_thrust import HydrusThrust
 # - Consider the servo delay with its model
 from tilt_qd.tilt_qd_servo import NMPCTiltQdServo
 from tilt_qd.tilt_qd_servo_dist import NMPCTiltQdServoDist
@@ -57,9 +56,9 @@ def main(args):
     if args.arch == 'qd':
 
         if args.model == 0:
-            nmpc = HydrusNormal(phys=phys_hydrus)
-        elif args.model == 1:
-            nmpc = HydrusThrust(phys=phys_hydrus)
+            nmpc = HydrusXiNormal(phys=phys_hydrus_xi)
+        # elif args.model == 1:
+        #     nmpc = HydrusThrust(phys=phys_hydrus_xi)
 
         # Archived methods
         elif args.model == 91:
@@ -115,8 +114,9 @@ def main(args):
     x_init = np.zeros(nx)
     x_init[6] = 1.0  # qw
     x_init[13:16] = [np.pi/2, np.pi/2, np.pi/2]   # joint angles state
+    x_init[16:20] = [np.pi, 0.0, np.pi, 0.0]   # gimbal angles state
     u_init = np.zeros(nu)  # joint angles command
-
+    u_init[4:8] = [np.pi, 0.0, np.pi, 0.0]   # gimbal angles command
     for stage in range(ocp_solver.N + 1):
         ocp_solver.set(stage, "x", x_init)
     for stage in range(ocp_solver.N):
@@ -127,9 +127,9 @@ def main(args):
     # ---------- Simulator ----------
     if args.arch == 'qd':
         if args.sim_model == 0:
-            sim_nmpc = HydrusNormal(phys=phys_hydrus)  # Consider both the servo delay and the thrust delay
+            sim_nmpc = HydrusXiNormal(phys=phys_hydrus_xi)  # Consider both the servo delay and the thrust delay
         elif args.sim_model == 1:
-            sim_nmpc = HydrusThrust(phys=phys_hydrus) 
+            sim_nmpc = HydrusThrust(phys=phys_hydrus_xi) 
         else:
             raise ValueError(f"Invalid sim model {args.sim_model}.")
         # sim_phy = phys_omni if 20 < args.model < 30 else phys_art
@@ -168,7 +168,7 @@ def main(args):
 
     ts_sim = 0.005  # or 0.001
 
-    t_total_sim = 30.0
+    t_total_sim = 18.0
 
     N_sim = int(t_total_sim / ts_sim)
  
@@ -177,11 +177,12 @@ def main(args):
     sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, is_build=True)
     nx_sim = sim_solver.acados_sim.dims.nx
     nr = 15
-    r_init = [0.3, 0.6, 1.0, 0.0, 0.0, 0.0, np.pi/2, np.pi/2, np.pi/2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    r_init = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, np.pi/2, np.pi/2, np.pi/2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     # State Initialization
     x_init_sim = np.zeros(nx_sim)
     x_init_sim[6] = 1.0  # qw
     x_init_sim[13:16] = [np.pi/2, np.pi/2, np.pi/2]   # joint angles state
+    x_init_sim[16:20] = [np.pi, 0.0, np.pi, 0.0]   # gimbal angles state
     # ---------- Reference ----------
     reference_generator = nmpc.get_reference_generator()
 
@@ -222,8 +223,6 @@ def main(args):
     init_sum_momentum = np.zeros(6)
     take_off = False
     take_off_i = 0
-    ay_target = 0.0
-    az_target = 0.0
     # y_target = 0.5
     # z_target = 2.0
     # t_ctrl = 4.0
@@ -232,6 +231,7 @@ def main(args):
     target_pxyz = np.array([[0.0, 0.5, 2.0]]).T
     target_prpy = np.array([[0.0, 0.0, 0.0]]).T
     nmpc.acados_init_p[30:33] = [np.pi/2, np.pi/2, np.pi/2]  # Initial joint angles
+    #nmpc.acados_init_p[33:37] = [np.pi, 0.0, np.pi, 0.0]  # Initial gimbal angles
     # xd_ddot = 0.0
     # xd_dot = 0.0
     # xd = 1.03923048
@@ -284,13 +284,13 @@ def main(args):
         target_vxyz = np.array([[0.0, 0.0, 0.0]]).T
         target_wrpy = np.array([[0.0, 0.0, 0.0]]).T
         if args.plot_type == 2:
-            #target_xyz = np.array([[1.0, 1.5, 2.0]]).T
+            target_xyz = np.array([[1.0, 1.5, 2.0]]).T
             target_rpy = np.array([[0.0, 0.0, 0.0]]).T
 
         if t_total_sim > 2.0:
           
-           # if t_now >= 4:
-                #target_xyz = np.array([[1.0, 1.5, 2.0]]).T
+            if t_now >= 4:
+                #target_xyz = np.array([[1.0, 0.5, 2.0]]).T
                 
                # x_now_sim[16:22] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
                 # u_cmd[4:7] = [np.pi/2, 0, 0] 
@@ -300,18 +300,24 @@ def main(args):
             #     target_rpy = np.array([[0.0, 0.0, 0.0]]).T
             #u_cmd[4:7] = [np.pi/2, np.pi/2, np.pi/2]
             #if t_now >= 4.0:
-            #     target_xyz = np.array([[1.0, 1.0, 1.0]]).T
-                # nmpc.acados_init_p[30:33] = [np.pi/3, np.pi/3, -np.pi/6]
-            if t_now >= 5.0: 
-                #u_cmd[4:7] = [np.pi/3, np.pi/3, -np.pi/6]
-                target_rpy = np.array([[0.0, 0.0, 0.0]]).T
-                target_xyz = np.array([[1.0, 0.5, 2.0]]).T
+                # nmpc.acados_init_p[30:33] = [0.0, 0.0, 0.0]
+                # target_xyz = np.array([[1.0, 0.0, 0.0]]).T
                 nmpc.acados_init_p[30:33] = [np.pi/3, np.pi/3, -np.pi/6]
-            #if t_now >= 10:
+            if t_now >= 6.0: 
+                target_xyz = np.array([[1.0, 0.5, 2.0]]).T
+                #nmpc.acados_init_p[30:33] = [np.pi/3, np.pi/3, -np.pi/6]
+                #u_cmd[4:7] = [np.pi/3, np.pi/3, -np.pi/6]
+                # target_rpy = np.array([[0.0, 0.0, 0.0]]).T
+                # target_xyz = np.array([[1.0, 0.5, 2.0]]).T
+            # if t_now >= 10:
+            if t_now >= 8.0:
+            
+                target_rpy = np.array([[0.2, 0.1, 0.3]]).T
+                #target_xyz = np.array([[0.5, 1.0, 2.0]]).T
                 #target_rpy = np.array([[roll, pitch, -x_now_sim[14]-x_now_sim[15]]]).T
                  
                 #target_xyz = np.array([[1.0, 1.5, 2]]).T
-                #target_rpy = np.array([[0.0, 0.0, 0.0]]).T
+                #target_rpy = np.array([[0.0, 0.0, 0.2]]).T
             
                # target_rpy = np.array([[roll, pitch, -x_now_sim[14]-x_now_sim[15]]]).T
             #     roll = 30.0 / 180.0 * np.pi
@@ -319,22 +325,21 @@ def main(args):
             #     yaw = 0.0 / 180.0 * np.pi
             #     target_rpy = np.array([[roll, pitch, yaw]]).T
 
-
-            
+            # if t_now >= 8.0:
+            #     nmpc.acados_init_p[30:33] = [np.pi/4, np.pi/4, np.pi/3]
             #     assert t_sqp_end <= 3.0
                 # if np.sqrt((y_target-x_now_sim[1])**2 + (z_target-x_now_sim[2])**2) < 0.1:
                 #     t_ctrl += ts_sim
                 #y_target = 0.5 * np.cos(np.pi/3*(t_now-6))
                 #z_target = 2 + 0.8 * np.sin(np.pi/3*(t_now-6))
-            if t_now >= 9.0:
-                y_target = 0.5 * np.cos(np.pi/3*(t_now-9))
-                z_target = 2 + 0.8 * np.sin(np.pi/3*(t_now-9))
-                vy_target = -0.5*np.pi/3*np.sin(np.pi/3*(t_now-9))
-                vz_target = 0.8*np.pi/3*np.cos(np.pi/3*(t_now-9))
-                #ay_target = -0.5*np.pi/3*np.pi/3*np.cos(np.pi/3*(t_now-9))
-                #az_target = -0.8*np.pi/3*np.pi/3*np.sin(np.pi/3*(t_now-9))
-                target_xyz = np.array([[1.0,  y_target, z_target]]).T
-                target_vxyz = np.array([[0.0,vy_target, vz_target]]).T
+            # if t_now >= 12.0:
+            #     target_rpy = np.array([[-0.1, 0.3, 0.1]]).T
+               # y_target = 0.5 * np.cos(np.pi/2*(t_now-9))
+               # z_target = 2 + 0.8 * np.sin(np.pi/2*(t_now-9))
+                #vy_target = -0.5*np.pi/2*np.sin(np.pi/2*(t_now-9))
+               # vz_target = 0.8*np.pi/2*np.cos(np.pi/2*(t_now-9))
+                #target_xyz = np.array([[1.0,  y_target, z_target]]).T
+                #target_vxyz = np.array([[0.0,vy_target, vz_target]]).T
        
                # target_rpy = np.array([[roll, pitch, -x_now_sim[14]-x_now_sim[15]]]).T
             # if t_now >= 13.0:
@@ -374,7 +379,7 @@ def main(args):
             # if t_now >= 12:
             #     x_now_sim[16:22] = [14.0, 0.0, 7.0, 0.0, 0.0, 0.0]
         # Compute reference trajectory from target pose
-        xr, ur = reference_generator.compute_trajectory(target_xyz, target_rpy, target_vxyz, target_wrpy)
+        xr, ur = nmpc.compute_trajectory(nmpc.acados_init_p[4:30], x_now, u_cmd, target_xyz, target_rpy, target_vxyz, target_wrpy)
         if args.plot_type == 2:
             if nx > 13:
                 xr[:, 13:] = 0.0
@@ -416,20 +421,8 @@ def main(args):
         
         if t_ctl >= ts_ctrl:
             t_ctl = 0.0 
-            quat = [x_now[7], x_now[8], x_now[9], x_now[6]]
-            roll, pitch, yaw = euler_from_quaternion(quat)
-            rot_cog = quaternion_matrix(quat)[:3, :3]
-            target_roll = np.arctan2((-ay_target*np.cos(yaw) + 0*np.sin(yaw)), 9.8-az_target)
-            target_pitch = np.arctan2((ay_target*np.sin(yaw) + 0*np.cos(yaw)), 9.8-az_target)
-            q = quaternion_from_euler(target_roll, 0.0, 0.0,axes='sxyz')
-            # print(target_roll)
-            # print(target_pitch)
-            # print(quat)
-            # print(q)
             # 0 ~ N-1
             for j in range(ocp_solver.N):
-                xr[j, 7:10] = q[0:3]
-                xr[j, 6] = q[3]
                 yr = np.concatenate((xr[j, :], ur[j, :]))
                 ocp_solver.set(j, "yref", yr)
                 quaternion_r = xr[j, 6:10]
@@ -438,24 +431,26 @@ def main(args):
                 ocp_solver.set(j, "p", nmpc.acados_init_p)  # For nonlinear quaternion error
 
             # N
-            xr[ocp_solver.N, 7:10] = q[0:3]
-            xr[ocp_solver.N, 6] = q[3]
             yr = xr[ocp_solver.N, :]
-            # print(q)
-            
-            # print(yr)
             ocp_solver.set(ocp_solver.N, "yref", yr)  # Final state of x, no u
             quaternion_r = xr[ocp_solver.N, 6:10]
+            # print(yr)
+            # print(ur[ocp_solver.N-1, :])
+            # print(x_now)
+            # print(u_cmd)
+            # print("-----")
             nmpc.acados_init_p[0:4] = quaternion_r
             ocp_solver.set(ocp_solver.N, "p", nmpc.acados_init_p)  # For nonlinear quaternion error
-
+          
             # Compute control feedback and take the first action
             try:
                 u_cmd = ocp_solver.solve_for_x0(x_now)
             except Exception as e:
                 print(f"Round {i}: acados ocp_solver returned status {ocp_solver.status}. Exiting.")
                 break
-   
+           # force, torque = nmpc.get_command_wrench(nmpc.acados_init_p[4:30], x_now_sim, u_cmd)  
+            # print(force, torque)
+            # print( nmpc.get_a_matrix(nmpc.acados_init_p[4:30], x_now_sim))
             # print(x_now_sim[13:16])
             # print(u_cmd[4:7])
             
@@ -579,7 +574,8 @@ def main(args):
         # Save current simulation data for later comparison
         x_history.append(x_now_sim.copy())
         u_history.append(u_cmd.copy())
-        r_now = [target_xyz[0,0], target_xyz[1,0], target_xyz[2,0], target_roll, target_pitch, target_rpy[2,0], nmpc.acados_init_p[30], nmpc.acados_init_p[31], nmpc.acados_init_p[32], est_external_wrench_plt[0], est_external_wrench_plt[1], est_external_wrench_plt[2], est_external_wrench_plt[3], est_external_wrench_plt[4], est_external_wrench_plt[5]]
+        r_now = [target_xyz[0,0], target_xyz[1,0], target_xyz[2,0], target_rpy[0,0], target_rpy[1,0], target_rpy[2,0], nmpc.acados_init_p[30], nmpc.acados_init_p[31], nmpc.acados_init_p[32], est_external_wrench_plt[0], est_external_wrench_plt[1], est_external_wrench_plt[2], est_external_wrench_plt[3], est_external_wrench_plt[4], est_external_wrench_plt[5]]
+  
         # --------- Update visualizer ----------
         viz.update(i, x_now_sim, r_now, u_cmd)  # Note: The recording frequency of u_cmd is the same as ts_sim
 

@@ -4,13 +4,12 @@ import time
 import numpy as np
 import argparse
 from tf.transformations import euler_from_quaternion
-from tf.transformations import quaternion_from_euler
 from tf.transformations import quaternion_matrix
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_bi")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_tri")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_qd")
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/hydrus")
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/hydrus_xi")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/archive")
 
 from imp_viz import Visualizer
@@ -18,13 +17,13 @@ from imp_viz import Visualizer
 # Quadrotor
 import tilt_qd.phys_param_beetle_omni as phys_omni
 import archive.phys_param_beetle_art as phys_art
-import hydrus.phys_param_hydrus as phys_hydrus
+import hydrus_xi.phys_param_hydrus_xi as phys_hydrus_xi
 # - Naive models
 from archive.tilt_qd_no_servo_ac_cost import NMPCTiltQdNoServoAcCost
 from tilt_qd.tilt_qd_no_servo import NMPCTiltQdNoServo
 # Hydrus
-from hydrus.hydrus_normal import HydrusNormal
-from hydrus.hydrus_thrust import HydrusThrust
+from hydrus_xi.hydrus_xi_normal import HydrusXiNormal
+
 # - Consider the servo delay with its model
 from tilt_qd.tilt_qd_servo import NMPCTiltQdServo
 from tilt_qd.tilt_qd_servo_dist import NMPCTiltQdServoDist
@@ -57,9 +56,9 @@ def main(args):
     if args.arch == 'qd':
 
         if args.model == 0:
-            nmpc = HydrusNormal(phys=phys_hydrus)
-        elif args.model == 1:
-            nmpc = HydrusThrust(phys=phys_hydrus)
+            nmpc = HydrusXiNormal(phys=phys_hydrus_xi)
+        # elif args.model == 1:
+        #     nmpc = HydrusThrust(phys=phys_hydrus)
 
         # Archived methods
         elif args.model == 91:
@@ -114,24 +113,23 @@ def main(args):
 
     x_init = np.zeros(nx)
     x_init[6] = 1.0  # qw
-    x_init[13:16] = [np.pi/2, np.pi/2, np.pi/2]   # joint angles state
-    u_init = np.zeros(nu)  # joint angles command
+    x_init[13:16] = [np.pi/2, np.pi/2, np.pi/2]   # joint angles 
+    x_init[16:20] = [np.pi/2, -np.pi/2, np.pi/2, -np.pi/2]   # gimbal angles state
+    u_init = np.zeros(nu)
+    u_init[0:4] = [0.0, 0.0, 0.0, 0.0]  # thrust 
+    u_init[4:8] = [np.pi/2, -np.pi/2, np.pi/2, -np.pi/2]  # gimbal angles state
 
     for stage in range(ocp_solver.N + 1):
         ocp_solver.set(stage, "x", x_init)
     for stage in range(ocp_solver.N):
         ocp_solver.set(stage, "u", u_init)
-    x_history = []
-    u_history = []
 
     # ---------- Simulator ----------
     if args.arch == 'qd':
         if args.sim_model == 0:
-            sim_nmpc = HydrusNormal(phys=phys_hydrus)  # Consider both the servo delay and the thrust delay
-        elif args.sim_model == 1:
-            sim_nmpc = HydrusThrust(phys=phys_hydrus) 
-        else:
-            raise ValueError(f"Invalid sim model {args.sim_model}.")
+            sim_nmpc = HydrusXiNormal(phys=phys_hydrus_xi)  # Consider both the servo delay and the thrust delay
+
+    
         # sim_phy = phys_omni if 20 < args.model < 30 else phys_art
         # if args.sim_model == 0:
         #     sim_nmpc = NMPCTiltQdServoThrust(phys=sim_phy)  # Consider both the servo delay and the thrust delay
@@ -168,7 +166,11 @@ def main(args):
 
     ts_sim = 0.005  # or 0.001
 
-    t_total_sim = 30.0
+    t_total_sim = 24.0
+    if args.plot_type == 1:
+        t_total_sim = 4.0
+    if args.plot_type == 2:
+        t_total_sim = 3.0
 
     N_sim = int(t_total_sim / ts_sim)
  
@@ -176,12 +178,13 @@ def main(args):
     # Sim solver
     sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, is_build=True)
     nx_sim = sim_solver.acados_sim.dims.nx
-    nr = 15
-    r_init = [0.3, 0.6, 1.0, 0.0, 0.0, 0.0, np.pi/2, np.pi/2, np.pi/2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    nr = 18
+    r_init = [0.3, 0.6, 1.0, 0.0, 0.0, 0.0, np.pi/2, np.pi/2, np.pi/2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     # State Initialization
     x_init_sim = np.zeros(nx_sim)
     x_init_sim[6] = 1.0  # qw
     x_init_sim[13:16] = [np.pi/2, np.pi/2, np.pi/2]   # joint angles state
+    x_init_sim[16:20] = [np.pi/2, -np.pi/2, np.pi/2, -np.pi/2]   # gimbal angles state
     # ---------- Reference ----------
     reference_generator = nmpc.get_reference_generator()
 
@@ -220,37 +223,34 @@ def main(args):
     est_external_wrench = np.zeros(6)
     est_external_wrench_plt = np.zeros(6)
     init_sum_momentum = np.zeros(6)
+    real_force = np.zeros(6)
     take_off = False
     take_off_i = 0
-    ay_target = 0.0
-    az_target = 0.0
-    # y_target = 0.5
-    # z_target = 2.0
-    # t_ctrl = 4.0
+    y_target = 0.5
+    z_target = 2.0
+    t_ctrl = 6.0
     target_vxyz = np.zeros(3)
     target_wxyz = np.zeros(3)
     target_pxyz = np.array([[0.0, 0.5, 2.0]]).T
     target_prpy = np.array([[0.0, 0.0, 0.0]]).T
-    nmpc.acados_init_p[30:33] = [np.pi/2, np.pi/2, np.pi/2]  # Initial joint angles
-    # xd_ddot = 0.0
-    # xd_dot = 0.0
-    # xd = 1.03923048
+    xd_ddot = 0.0
+    xd_dot = 0.0
+    xd = 1.03923048
 
-    # xref = xd
-    # yd_ddot = 0.0
-    # yd_dot = 0.0
-    # yd = 0.52230762
-    # yref = yd
-    # cmd = False
-    # pe_cog_sim = np.zeros(3)
-    # pe_world_sim = np.zeros(3)
-    # lam = 1.0
-    # last_err = 0.0
-    # last_q = u_cmd[4:7]
-    # sim_start = False
-    # collision = False
+    xref = xd
+    yd_ddot = 0.0
+    yd_dot = 0.0
+    yd = 0.52230762
+    yref = yd
+    cmd = False
+    pe_cog_sim = np.zeros(3)
+    pe_world_sim = np.zeros(3)
+    lam = 1.0
+    last_err = 0.0
+    last_q = u_cmd[4:7]
+    sim_start = False
+    collision = False
     for i in range(N_sim):
-        # print(sim_solver.acados_sim.
         # --------- Update time ---------
         t_now = i * ts_sim
         t_ctl += ts_sim
@@ -282,13 +282,18 @@ def main(args):
         target_xyz = np.array([[0.0, 0.0, 2.0]]).T
         target_rpy = np.array([[0.0, 0.0, 0.0]]).T
         target_vxyz = np.array([[0.0, 0.0, 0.0]]).T
-        target_wrpy = np.array([[0.0, 0.0, 0.0]]).T
+        # target_wxyz = np.array([[0.0, 0.0, 0.0]]).T
         if args.plot_type == 2:
             #target_xyz = np.array([[1.0, 1.5, 2.0]]).T
             target_rpy = np.array([[0.0, 0.0, 0.0]]).T
 
         if t_total_sim > 2.0:
-          
+            if 2.0 <= t_now :
+                #target_xyz = np.array([[1.0, 1.5, 2.0]]).T
+
+                roll = 30.0 / 180.0 * np.pi
+                pitch = 60.0 / 180.0 * np.pi
+                yaw = 30.0 / 180.0 * np.pi
            # if t_now >= 4:
                 #target_xyz = np.array([[1.0, 1.5, 2.0]]).T
                 
@@ -298,15 +303,13 @@ def main(args):
             #     assert t_sqp_end <= 3.0
             #     target_xyz = np.array([[1.0, 1.0, 1.0]]).T
             #     target_rpy = np.array([[0.0, 0.0, 0.0]]).T
-            #u_cmd[4:7] = [np.pi/2, np.pi/2, np.pi/2]
-            #if t_now >= 4.0:
+            if t_now >= 4 and t_now < 10:
             #     target_xyz = np.array([[1.0, 1.0, 1.0]]).T
-                # nmpc.acados_init_p[30:33] = [np.pi/3, np.pi/3, -np.pi/6]
-            if t_now >= 5.0: 
+               
+              
                 #u_cmd[4:7] = [np.pi/3, np.pi/3, -np.pi/6]
-                target_rpy = np.array([[0.0, 0.0, 0.0]]).T
-                target_xyz = np.array([[1.0, 0.5, 2.0]]).T
-                nmpc.acados_init_p[30:33] = [np.pi/3, np.pi/3, -np.pi/6]
+                target_rpy = np.array([[0.0, 0.0, -np.pi/6]]).T
+                target_xyz = np.array([[0.0, 0.0, 2.0]]).T
             #if t_now >= 10:
                 #target_rpy = np.array([[roll, pitch, -x_now_sim[14]-x_now_sim[15]]]).T
                  
@@ -326,16 +329,9 @@ def main(args):
                 #     t_ctrl += ts_sim
                 #y_target = 0.5 * np.cos(np.pi/3*(t_now-6))
                 #z_target = 2 + 0.8 * np.sin(np.pi/3*(t_now-6))
-            if t_now >= 9.0:
-                y_target = 0.5 * np.cos(np.pi/3*(t_now-9))
-                z_target = 2 + 0.8 * np.sin(np.pi/3*(t_now-9))
-                vy_target = -0.5*np.pi/3*np.sin(np.pi/3*(t_now-9))
-                vz_target = 0.8*np.pi/3*np.cos(np.pi/3*(t_now-9))
-                #ay_target = -0.5*np.pi/3*np.pi/3*np.cos(np.pi/3*(t_now-9))
-                #az_target = -0.8*np.pi/3*np.pi/3*np.sin(np.pi/3*(t_now-9))
-                target_xyz = np.array([[1.0,  y_target, z_target]]).T
-                target_vxyz = np.array([[0.0,vy_target, vz_target]]).T
-       
+            if t_now >= 8.0:
+                target_xyz = np.array([[1.0, 0.5, 2.0]]).T
+               # target_rpy = np.array([[0.0, 0.0, -np.pi/6]]).T
                # target_rpy = np.array([[roll, pitch, -x_now_sim[14]-x_now_sim[15]]]).T
             # if t_now >= 13.0:
             #     x_now_sim[25:28] = [0.0, 0.0, 0.0]
@@ -348,13 +344,13 @@ def main(args):
             #     x_now_sim[25:28] = [-3.0, 0.0, 0.0]
             # if t_now >= 18:
             #     x_now_sim[25:28] = [-2.0, 0.0, 0.0]
-           # if t_now >= 12.5:
+            # if t_now >= 12.5:
             # #     x_now_sim[25:28] = [-1.0, 0.0, 0.0]
             #     y_target = 0.5 * np.cos(np.pi/3*(t_now-12.5))
             #     z_target = 2 + 0.8 * np.sin(np.pi/3*(t_now-12.5))
             #     vy_target = -0.5*np.pi/3*np.sin(np.pi/3*(t_now-12.5))
             #     vz_target = 0.8*np.pi/3*np.cos(np.pi/3*(t_now-12.5))
-                #target_xyz = np.array([[1.0, y_target, z_target]]).T
+            #     target_xyz = np.array([[1.0, y_target, z_target]]).T
             #     target_vxyz = np.array([[0.0,vy_target, vz_target]]).T
                 # target_rpy = np.array([[target_roll, target_pitch, 0.0]]).T
                 # target_vxyz = (target_xyz - target_pxyz)/ ts_sim
@@ -374,7 +370,8 @@ def main(args):
             # if t_now >= 12:
             #     x_now_sim[16:22] = [14.0, 0.0, 7.0, 0.0, 0.0, 0.0]
         # Compute reference trajectory from target pose
-        xr, ur = reference_generator.compute_trajectory(target_xyz, target_rpy, target_vxyz, target_wrpy)
+        xr, ur = reference_generator.compute_trajectory(target_xyz, target_rpy)
+
         if args.plot_type == 2:
             if nx > 13:
                 xr[:, 13:] = 0.0
@@ -395,7 +392,7 @@ def main(args):
 
         # -------- Update solver --------
         comp_time_start = time.time()
-        # -------- NMPC Controller --------
+        # -------- PID Controller --------
         # if t_ctl >= ts_ctrl:
         #     t_ctl = 0.0
         #     z_acc = 24.0*(target_xyz[2,0]-x_now[2])+10.0*(0.0-x_now[5]) + 9.798*3.4
@@ -415,58 +412,106 @@ def main(args):
         # -------- Impedance Controller --------
         
         if t_ctl >= ts_ctrl:
-            t_ctl = 0.0 
+            t_ctl = 0.0
+            m = 3.4
+            zeta = 2.0
+            # if est_external_wrench[0] > 3 or est_external_wrench[0] < -3:
+            #     mdx = np.abs(1 * est_external_wrench[0])
+            # else:
+            mdx = 5.0
+            # if est_external_wrench[1] > 5:
+            #     mdy = 1 * est_external_wrench[1]
+            # else:
+            mdy = 5.0
+            #if est_external_wrench[2] > 5:
+                #mdz = 1 * est_external_wrench[2]
+            #else:
+            mdz = 5.0
+            # calcaluate the translation acceleration
+            x_acc = (1/mdx - 1/m) * est_external_wrench[0] + 2.0*(target_xyz[0,0]-x_now[0]) + 2*1.1*np.sqrt(2.0)*(target_vxyz[0,0]-x_now[3])
+            y_acc = (1/mdy - 1/m) * est_external_wrench[1] + 2.0*(target_xyz[1,0]-x_now[1]) + 2*1.1*np.sqrt(2.0)*(target_vxyz[1,0]-x_now[4])
+            z_acc = (1/mdz - 1/m) * est_external_wrench[2] + 3.0*(target_xyz[2,0]-x_now[2]) + 2*0.9*np.sqrt(3.0)*(target_vxyz[2,0]-x_now[5]) + 9.798
+            # x_acc = 1.0*(target_xyz[0,0]-x_now[0]) + 1.6*(0.0-x_now[3])
+            # y_acc = 1.0*(target_xyz[1,0]-x_now[1]) + 1.6*(0.0-x_now[4])
+            # z_acc = 8.0*(target_xyz[2,0]-x_now[2]) + 5.0*(0.0-x_now[5]) + 9.798
+            
+            if target_xyz[2,0] > 0 and take_off == False:
+                take_off = True
+            if take_off == False:
+                z_acc = 0.0
+            else:
+                if i - take_off_i < 400:
+                    z_acc = z_acc * (i - take_off_i) / 400
             quat = [x_now[7], x_now[8], x_now[9], x_now[6]]
             roll, pitch, yaw = euler_from_quaternion(quat)
             rot_cog = quaternion_matrix(quat)[:3, :3]
-            target_roll = np.arctan2((-ay_target*np.cos(yaw) + 0*np.sin(yaw)), 9.8-az_target)
-            target_pitch = np.arctan2((ay_target*np.sin(yaw) + 0*np.cos(yaw)), 9.8-az_target)
-            q = quaternion_from_euler(target_roll, 0.0, 0.0,axes='sxyz')
-            # print(target_roll)
-            # print(target_pitch)
-            # print(quat)
-            # print(q)
-            # 0 ~ N-1
-            for j in range(ocp_solver.N):
-                xr[j, 7:10] = q[0:3]
-                xr[j, 6] = q[3]
-                yr = np.concatenate((xr[j, :], ur[j, :]))
-                ocp_solver.set(j, "yref", yr)
-                quaternion_r = xr[j, 6:10]
-                nmpc.acados_init_p[0:4] = quaternion_r
-                    # if t_now >= 7.0:
-                ocp_solver.set(j, "p", nmpc.acados_init_p)  # For nonlinear quaternion error
-
-            # N
-            xr[ocp_solver.N, 7:10] = q[0:3]
-            xr[ocp_solver.N, 6] = q[3]
-            yr = xr[ocp_solver.N, :]
-            # print(q)
-            
-            # print(yr)
-            ocp_solver.set(ocp_solver.N, "yref", yr)  # Final state of x, no u
-            quaternion_r = xr[ocp_solver.N, 6:10]
-            nmpc.acados_init_p[0:4] = quaternion_r
-            ocp_solver.set(ocp_solver.N, "p", nmpc.acados_init_p)  # For nonlinear quaternion error
-
-            # Compute control feedback and take the first action
-            try:
-                u_cmd = ocp_solver.solve_for_x0(x_now)
-            except Exception as e:
-                print(f"Round {i}: acados ocp_solver returned status {ocp_solver.status}. Exiting.")
-                break
+            target_roll = np.arctan2((-y_acc*np.cos(yaw) + x_acc*np.sin(yaw)), z_acc)
+            target_pitch = np.arctan2((y_acc*np.sin(yaw) + x_acc*np.cos(yaw)), z_acc)
+            real_x_acc = (np.tan(roll)*np.sin(yaw) + np.tan(pitch)*np.cos(yaw)) * z_acc
+            real_y_acc = (-np.tan(roll)*np.cos(yaw) + np.tan(pitch)*np.sin(yaw)) * z_acc
+            I = nmpc.get_I_matrix(nmpc.acados_init_p[4:30], x_now)
+            I_d = np.matrix([[0.6, 0.0, 0.0],
+                             [0.0, 0.6, 0.0],
+                             [0.0, 0.0, 0.4]])
+            I_d = I
+            Kp = np.matrix([[60.0, 0.0, 0.0],
+                            [0.0, 60.0, 0.0],
+                            [0.0, 0.0, 10.0]])
+            Kd = np.matrix([[2*1.0*np.sqrt(60), 0.0, 0.0],
+                            [0.0, 2*1.0*np.sqrt(60), 0.0],
+                            [0.0, 0.0, 2*0.5*np.sqrt(10)]])
+            ko = np.matrix(np.diag([6.0, 6.0, 6.0, 4.5, 4.5, 4.5]))
+            if t_now >= 10.5:
+                ko = np.matrix(np.diag([6.0, 6.0, 6.0, 4.5, 4.5, 4.5]))
+            delta_x = np.array([target_roll-roll, target_pitch-pitch, target_rpy[2,0]-yaw])
+            delta_v = np.array([0.0-x_now[10], 0.0-x_now[11], 0.0-x_now[12]])
+    
+            c_vector = nmpc.get_c_vector(nmpc.acados_init_p[4:30], x_now)
+            # calcaluate the command torque
+            torque = ((I * I_d.I - np.eye(3)) @ est_external_wrench[3:6]).reshape(3, 1) + I @ (Kp @ delta_x + Kd @ delta_v).reshape(3, 1) 
+            #torque = (Kp @ delta_x + Kd @ delta_v).reshape(3, 1) 
+            # print((I * I_d.I - np.eye(3)) @ x_now_sim[19:22])
+            # print((Kp @ delta_x + Kd @ delta_v))
+            # print("aa")
+            torque = np.squeeze(np.asarray(torque)) 
+            torque_w = rot_cog @ torque
+            sum_momentum, N = nmpc.get_comp_of_external_wrench(nmpc.acados_init_p[4:30], x_now)
+            # # When drone is on the ground, the N_vector(Gravity and Coriolis force) should be zero.
+            # # Now, the dynamic equation is Mv_cot + Cv + g = tao_ext + tao_cmd + N, Here N is the support force.
+            # # So, the N_vector now is (Cv+g-N) = 0)
+            target_wrench = np.array([real_x_acc*m, real_y_acc*m, z_acc*m, torque_w[0], torque_w[1], torque_w[2]])
+            external_wrench_I_term += (target_wrench - N + est_external_wrench) * ts_ctrl
+            est_external_wrench = np.squeeze(np.asarray(ko @ (sum_momentum-external_wrench_I_term)))
+            # When the drone is on the ground, ignore the support force.
+            est_external_wrench_plt = est_external_wrench.copy()
+            if i < 200 * 4:
+                est_external_wrench_plt[2] = 0.0
+            # print("target_wrench: ", target_wrench) 
+            # print("est_external_wrench: ", est_external_wrench)
+            mat = nmpc.get_alloc_matrix(nmpc.acados_init_p[4:30], x_now)
+            #print(np.linalg.pinv(mat[:4, :]))
+            #print(np.array([z_acc*m, torque[0], torque[1], torque[2]]))
+            force = np.array([z_acc, 0, 0, 0]) * m
+            u_tran = np.linalg.pinv(mat[2:, :]) @ force
+            u_rot = np.linalg.pinv(mat[3:, :]) @ torque
+            #pe_cog, pe_world = nmpc.get_end_effector_position(nmpc.acados_init_p[4:30], x_now)
+           # print("yaw: ", mat)
+            #print("yaw: ", delta_u)
+        
+            # print("euler_acc: ", euler_acc)
+            # print("delta_u: ", delta_u)
+            # print("mat: ", np.linalg.pinv(mat))
+           
+            #print(u_tran)
+            #print(u_rot)
+            wrench_tgt = np.array([x_acc*m, y_acc*m, z_acc*m, torque[0], torque[1], torque[2]])
+            u_cmd[0:4] = np.squeeze(np.asarray(u_tran + u_rot)) 
+            out = nmpc.cal_wrench(nmpc.acados_init_p[4:30], x_now, u_cmd, wrench_tgt)
+            #u_cmd[4:8] = out
+            #print("out: ", out)
+            real_force = np.squeeze(np.asarray(mat @ np.squeeze(np.asarray(u_rot))))
    
-            # print(x_now_sim[13:16])
-            # print(u_cmd[4:7])
-            
-            # if target_xyz[2,0] > 0 and take_off == False:
-            #     take_off = True
-            # if take_off == False:
-            #     z_acc = 0.0
-            # else:
-            #     if i - take_off_i < 400:
-            #         z_acc = z_acc * (i - take_off_i) / 400
-            
+
 
         # --------- Admittance controller ----------
         # Ma(xd_ddot-xr_ddot) + Ca(xd_dot-xr_dot) + Ka(xd - xr) = Fext
@@ -510,11 +555,9 @@ def main(args):
 
 
         # --------- Update simulation ----------
-   
+      
         sim_solver.set("x", x_now_sim)
         sim_solver.set("u", u_cmd)
-        sim_solver.set("p", nmpc.acados_init_p)
-        #sim_solver.set("p", params=sim_nmpc.acados_init_p)
 
         status = sim_solver.solve()
         if status != 0:
@@ -547,15 +590,15 @@ def main(args):
         # We add a wall here, the equation is y + x - 1 = 0. The drone could enter the area where y + x - 1 > 0
         # p = np.array([x_now_sim[0], x_now_sim[1], x_now_sim[2]]) # position vector
         # v = np.array([x_now_sim[3], x_now_sim[4], x_now_sim[5]]) # velocity vector
-        # n = np.array([-np.sqrt(2)/2, -np.sqrt(2)/2, 0.0]) # normal vector
-        # # if (v @ n) < 0.0:
-        # #     if p[0]+p[1]-1 > 0.0:
-        # #         a = (p[0]+p[1]-1)/np.sqrt(2)
-        # #         x_now_sim[0] += n[0]*a
-        # #         x_now_sim[1] += n[1]*a
-        # #         b = -(v @ n) * n
-        # #         x_now_sim[3] += b[0]
-        # #         x_now_sim[4] += b[1]
+        # n = np.array([-1, 0.0, 0.0]) # normal vector
+        # if (v @ n) < 0.0:
+        #     if p[0]+p[1]-1 > 0.0:
+        #         a = (p[0]+p[1]-1)/np.sqrt(2)
+        #         x_now_sim[0] += n[0]*a
+        #         x_now_sim[1] += n[1]*a
+        #         b = -(v @ n) * n
+        #         x_now_sim[3] += b[0]
+        #         x_now_sim[4] += b[1]
         
         if x_now_sim[5] < 0.0:
             if x_now_sim[2] <= 0.0:
@@ -579,7 +622,7 @@ def main(args):
         # Save current simulation data for later comparison
         x_history.append(x_now_sim.copy())
         u_history.append(u_cmd.copy())
-        r_now = [target_xyz[0,0], target_xyz[1,0], target_xyz[2,0], target_roll, target_pitch, target_rpy[2,0], nmpc.acados_init_p[30], nmpc.acados_init_p[31], nmpc.acados_init_p[32], est_external_wrench_plt[0], est_external_wrench_plt[1], est_external_wrench_plt[2], est_external_wrench_plt[3], est_external_wrench_plt[4], est_external_wrench_plt[5]]
+        r_now = [target_xyz[0,0], target_xyz[1,0], target_xyz[2,0], target_roll, target_pitch, target_rpy[2,0], 0, 0, 0, real_force[0], real_force[1], real_force[2], real_force[3], real_force[4], real_force[5], pe_world_sim[0], pe_world_sim[1], pe_world_sim[2]]
         # --------- Update visualizer ----------
         viz.update(i, x_now_sim, r_now, u_cmd)  # Note: The recording frequency of u_cmd is the same as ts_sim
 

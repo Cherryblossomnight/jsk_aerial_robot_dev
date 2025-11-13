@@ -1,5 +1,5 @@
 mpc_solver_name: aerial_robot_control::mpc_solver::TiltQdServoDistMdlMPCSolver
-aerial_robot_control_name: aerial_robot_control/nmpc_controller/hydrus/hydrus_nmpc
+aerial_robot_control_name: aerial_robot_control/nmpc_controller/hydrus_xi/hydrus_xi_nmpc
 
 controller:
   alloc:
@@ -8,7 +8,7 @@ controller:
 
   nmpc:
     T_samp: 0.01    # 100 Hz  TODO: should be adjusted by main_rate
-    T_horizon: 2.0  # in seconds
+    T_horizon: 0.5  # in seconds
     T_step: 0.01     # in seconds
 
     # constraint
@@ -30,16 +30,16 @@ controller:
     # params for the cost function
     Qp_xy: 600
     Qp_z: 600
-    Qv_xy: 1
-    Qv_z: 1
+    Qv_xy: 10
+    Qv_z: 10
     Qq_xy: 1200
     Qq_z: 600
-    Qw_xy: 0.5
+    Qw_xy: 15
     Qw_z: 10
     Qj: 100
-    Qa: 2
-    Rt: 0.01
-    Rac_d: 250  # difference of ac
+    Qg: 20
+    Rt: 0.5
+    Rg: 0.01  # difference of ac
 
     is_attitude_ctrl: false
     is_body_rate_ctrl: false

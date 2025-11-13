@@ -2,7 +2,7 @@ import numpy as np
 from tf_conversions import transformations as tf
 import casadi as ca
 
-class HydrusReferenceGenerator():
+class HydrusXiReferenceGenerator():
     """
     Class to generate reference trajectories.
 
@@ -108,7 +108,7 @@ class HydrusReferenceGenerator():
         # print(self.alloc_mat)
         pass
        
-    def compute_trajectory(self, target_xyz, target_rpy, target_vxyz=np.array([[0.0, 0.0, 0.0]]).T, target_wrpy=np.array([[0.0, 0.0, 0.0]]).T):
+    def compute_trajectory(self, target_xyz, target_rpy, target_vxyz=np.array([[0.0, 0.0, 0.0]]).T, target_wrpy=np.array([[0.0, 0.0, 0.0]]).T, target_joint_angles=np.array([[np.pi/2, np.pi/2, np.pi/2]]).T, target_gimbal_angles=np.array([[np.pi, 0.0, np.pi, 0.0]]).T):
         """
         Convert current target pose to a reference trajectory over the entire horizon.
         Compute target quaternions and control reference from a target rotation and then 
@@ -155,5 +155,5 @@ class HydrusReferenceGenerator():
         # Assemble reference trajectories in controller file since their definition is 
         # closely related to the cost function
         # xr, ur = self.nmpc.get_reference(target_xyz, target_qwxyz, ft_ref, a_ref)
-        xr, ur = self.nmpc.get_reference(target_xyz, target_qwxyz, target_vxyz, target_wrpy)
+        xr, ur = self.nmpc.get_reference(target_xyz, target_qwxyz, target_vxyz, target_wrpy, target_joint_angles, target_gimbal_angles)
         return xr, ur
