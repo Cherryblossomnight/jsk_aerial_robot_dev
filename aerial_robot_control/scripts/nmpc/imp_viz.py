@@ -109,7 +109,7 @@ class Visualizer:
         if self.include_servo_model: n_plots += 1           # Additional State: Servo Angle
         if self.include_thrust_model: n_plots += 1          # Additional State: Thrust
         if self.tilt: n_plots += 1                          # Additional Control: Servon Angle
-        if self.include_cog_dist_model: n_plots += 2        # Additional State: Disturbance Force and Torque
+        #if self.include_cog_dist_model: n_plots += 2        # Additional State: Disturbance Force and Torque
         if self.include_cog_dist_est: n_plots += 2          # Disturbance Force and Torque
         if hasattr(self, 'u_sim_mpc_all'): n_plots += 2     # MPC controls if needed
 
@@ -219,9 +219,9 @@ class Visualizer:
 
         # Plot Estimated Disturbance Force
         plt.subplot(ceil(n_plots/2), 2, 7)
-        plt.plot(time_data_x, r_sim_all[:self.data_idx, 9], 'c', label="fx_est")
-        plt.plot(time_data_x, r_sim_all[:self.data_idx, 10], 'm', label="fy_est")
-        plt.plot(time_data_x, r_sim_all[:self.data_idx, 11], 'y', label="fz_est")
+        plt.plot(time_data_x, r_sim_all[:self.data_idx, 9], 'c', label="fx")
+        plt.plot(time_data_x, r_sim_all[:self.data_idx, 10], 'm', label="fy")
+        plt.plot(time_data_x, r_sim_all[:self.data_idx, 11], 'y', label="fz")
         plt.legend(framealpha=legend_alpha)
         plt.xlabel("Time (s)")
         plt.xlim([0, t_total_sim])
@@ -230,9 +230,9 @@ class Visualizer:
 
         # Plot Estimated Disturbance Torque
         plt.subplot(ceil(n_plots/2), 2, 8)
-        plt.plot(time_data_x, r_sim_all[:self.data_idx, 12], 'c', label="tx_ext")
-        plt.plot(time_data_x, r_sim_all[:self.data_idx, 13], 'm', label="ty_ext")
-        plt.plot(time_data_x, r_sim_all[:self.data_idx, 14], 'y', label="tz_ext")
+        plt.plot(time_data_x, r_sim_all[:self.data_idx, 12], 'c', label="tx")
+        plt.plot(time_data_x, r_sim_all[:self.data_idx, 13], 'm', label="ty")
+        plt.plot(time_data_x, r_sim_all[:self.data_idx, 14], 'y', label="tz")
         plt.legend(framealpha=legend_alpha)
         plt.xlabel("Time (s)")
         plt.xlim([0, t_total_sim])
@@ -361,32 +361,32 @@ class Visualizer:
 
         if self.include_cog_dist_model:
             # Plot Disturbance Force as State in NMPC
-            if self.include_end_effector_dist_model:
-                plt.subplot(ceil(n_plots/2), 2, 7)
-            else:
-                plt.subplot(ceil(n_plots/2), 2, 9)
-            plt.plot(time_data_x, x_sim_all[:self.data_idx, 19], 'c--', label="fx")
-            plt.plot(time_data_x, x_sim_all[:self.data_idx, 20], 'm--', label="fy")
-            plt.plot(time_data_x, x_sim_all[:self.data_idx, 21], 'y--', label="fz")
+            #if self.include_end_effector_dist_model:
+            plt.subplot(ceil(n_plots/2), 2, 7)
+            # else:
+            #     plt.subplot(ceil(n_plots/2), 2, 9)
+            plt.plot(time_data_x, r_sim_all[:self.data_idx, 15], 'c--', label="fx_est")
+            plt.plot(time_data_x, r_sim_all[:self.data_idx, 16], 'm--', label="fy_est")
+            plt.plot(time_data_x, r_sim_all[:self.data_idx, 17], 'y--', label="fz_est")
             plt.legend(framealpha=legend_alpha, loc="upper left")
             plt.xlim([0, t_total_sim])
             plt.ylabel("Disturbance Force (N)")
             plt.grid(True)
 
             # Plot Disturbance Torque as State in NMPC
-            if self.include_end_effector_dist_model:
-                plt.subplot(ceil(n_plots/2), 2, 8)
-            else:
-                plt.subplot(ceil(n_plots/2), 2, 10)
-            plt.plot(time_data_x, x_sim_all[:self.data_idx, 22], 'c--', label="tx")
-            plt.plot(time_data_x, x_sim_all[:self.data_idx, 23], 'm--', label="ty")
-            plt.plot(time_data_x, x_sim_all[:self.data_idx, 24], 'y--', label="tz")
+            #if self.include_end_effector_dist_model:
+            plt.subplot(ceil(n_plots/2), 2, 8)
+            # else:
+            #     plt.subplot(ceil(n_plots/2), 2, 10)
+            plt.plot(time_data_x, r_sim_all[:self.data_idx, 18], 'c--', label="tx_est")
+            plt.plot(time_data_x, r_sim_all[:self.data_idx, 19], 'm--', label="ty_est")
+            plt.plot(time_data_x, r_sim_all[:self.data_idx, 20], 'y--', label="tz_est")
             plt.legend(framealpha=legend_alpha, loc="upper left")
             plt.xlim([0, t_total_sim])
             plt.ylabel("Disturbance Torque (N*m)")
             plt.grid(True)
 
-            plot_idx += 2
+        #     plot_idx += 2
 
         if self.include_end_effector_dist_model:
             plt.subplot(ceil(n_plots/2), 2, 9)

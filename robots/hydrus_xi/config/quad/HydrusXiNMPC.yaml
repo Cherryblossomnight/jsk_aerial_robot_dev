@@ -21,6 +21,9 @@ controller:
     j_max: 1.5708
     j_min: -1.5708
 
+    g_max: 6.28319
+    g_min: -6.28319
+
     thrust_max: 30 # N
     thrust_min: 0 # N
 

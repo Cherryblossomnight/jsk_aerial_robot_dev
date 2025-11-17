@@ -47,6 +47,13 @@ c2 = physical_params["c2"]
 c3 = physical_params["c3"]
 c4 = physical_params["c4"]
 
+
+f1 = 0.0
+f2 = 0.0
+f3 = 0.0
+t1 = 0.0
+t2 = 0.0
+t3 = 0.0
 # concatenate the parameters to make a new list
 physical_param_list = [
     l, m1, m2, m3, m4, m, gravity, 

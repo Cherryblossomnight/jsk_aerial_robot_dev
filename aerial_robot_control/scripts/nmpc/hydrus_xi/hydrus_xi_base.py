@@ -127,25 +127,6 @@ class HydrusXiBase(RecedingHorizonBase):
             self.ft_s = ca.vertcat(self.ft1s, self.ft2s, self.ft3s, self.ft4s)
             self.states = ca.vertcat(self.states, self.ft_s)
 
-        # - Extend state-space by disturbance on CoG (actual)
-        # Differentiate between actual disturbance set as state and set as parameter
-        if self.include_cog_dist_model:
-            # Force disturbance applied to CoG in World frame
-            self.fds_w = ca.SX.sym("fds_w", 3)
-            # Torque disturbance applied to CoG in Body frame
-            self.tau_ds_b = ca.SX.sym("tau_ds_b", 3)
-
-            self.states = ca.vertcat(self.states, self.fds_w, self.tau_ds_b)
-        else:
-            self.fds_w = ca.vertcat(0.0, 0.0, 0.0)
-            self.tau_ds_b = ca.vertcat(0.0, 0.0, 0.0)
-
-        if self.include_end_effector_dist_model:
-            self.fde_w = ca.SX.sym("fde_w", 3)
-            self.states = ca.vertcat(self.states, self.fde_w)
-        else:
-            self.fde_w = ca.vertcat(0.0, 0.0, 0.0)
-
         # Control inputs
         # - Forces from thrust at each rotor
         self.ft1c = ca.SX.sym("ft1c")
@@ -162,7 +143,13 @@ class HydrusXiBase(RecedingHorizonBase):
             # Either use the time-derivative of the servo angle as control input directly
             self.j_c = ca.vertcat(self.j1c, self.j2c, self.j3c)
             #controls = ca.vertcat(controls, self.j_c)
-
+        
+        
+        if self.include_end_effector_dist_model:
+            self.fde_w = ca.SX.sym("fde_w", 3)
+            self.states = ca.vertcat(self.states, self.fde_w)
+        else:
+            self.fde_w = ca.vertcat(0.0, 0.0, 0.0)
 
         # Model parameters
         self.qwr = ca.SX.sym("qwr")  # Reference for quaternions
@@ -194,6 +181,8 @@ class HydrusXiBase(RecedingHorizonBase):
         I4yy = ca.SX.sym("I4yy")
         I4zz = ca.SX.sym("I4zz")
 
+        
+
         # m11 = I2zz+I3zz+I4zz+self.m*self.l**2*(15/4+3*ca.cos(self.j2s)+ca.cos(self.j3s)+ca.cos(self.j2s+self.j3s))
         # m12 = I3zz+I4zz+self.m*self.l**2*(3/2+3*ca.cos(self.j2s)/2+ca.cos(self.j3s)+ca.cos(self.j2s+self.j3s)/2)
         # m13 = I4zz+self.m*self.l**2*(1/4+ca.cos(self.j3s)/2+ca.cos(self.j2s+self.j3s)/2)
@@ -220,9 +209,9 @@ class HydrusXiBase(RecedingHorizonBase):
         phy_params = ca.vertcat(self.l, mass, self.m, self.gravity, I1xx, I1yy, I1zz, I2xx, I2yy, I2zz, I3xx, I3yy, I3zz, I4xx, I4yy, I4zz, self.kq_d_kt,
                                 self.dr1, self.dr2, self.dr3, self.dr4, t_rotor, t_servo)
         parameters = ca.vertcat(parameters, phy_params)
-
+        parameters = ca.vertcat(parameters, self.j_c)
         # - Extend model parameters by CoG disturbance
-        if self.include_cog_dist_parameter:
+        if self.include_cog_dist_model:
             # Force disturbance applied to CoG in World frame
             self.fdp_w = ca.SX.sym("fdp_w", 3)
             # Torque disturbance applied to CoG in Body frame
@@ -249,7 +238,7 @@ class HydrusXiBase(RecedingHorizonBase):
             mq = ca.vertcat(self.mqx, self.mqy, self.mqz)
 
             parameters = ca.vertcat(parameters, mp, mq)
-        parameters = ca.vertcat(parameters, self.j_c)
+  
         # Transformation matrices between coordinate systems World, Body, End-of-arm, Rotor using quaternions
         # - Root to CoG
         rot_r2c = ca.vertcat(
@@ -408,6 +397,21 @@ class HydrusXiBase(RecedingHorizonBase):
             self.rot_e3r3 = ca.SX.eye(3);
             self.rot_e4r4 = ca.SX.eye(3)
 
+        # - Extend state-space by disturbance on CoG (actual)
+        # Differentiate between actual disturbance set as state and set as parameter
+        # if self.include_cog_dist_model:
+        #     # Force disturbance applied to CoG in World frame
+        #     self.fds_w = ca.SX.sym("fds_w", 3)
+        #     # Torque disturbance applied to CoG in Body frame
+        #     self.tau_ds_b = ca.SX.sym("tau_ds_b", 3)
+
+        #     self.states = ca.vertcat(self.states, self.fds_w, self.tau_ds_b)
+        # else:
+        self.fds_w = ca.vertcat(0.0, 0.0, 0.0)
+        self.tau_ds_b = ca.vertcat(0.0, 0.0, 0.0)
+
+  
+
         # Wrench in Rotor frame
         # If rotor dynamics are modeled, explicitly use thrust state as force.
         # Else use thrust control which is then assumed to be equal to the thrust state at all times.
@@ -526,11 +530,11 @@ class HydrusXiBase(RecedingHorizonBase):
                             )
 
         # - Extend model by disturbances simply to match state dimensions
-        if self.include_cog_dist_model:
-            ds = ca.vertcat(ds,
-                            ca.vertcat(0.0, 0.0, 0.0),
-                            ca.vertcat(0.0, 0.0, 0.0),
-                            )
+        # if self.include_cog_dist_model:
+        #     ds = ca.vertcat(ds,
+        #                     ca.vertcat(0.0, 0.0, 0.0),
+        #                     ca.vertcat(0.0, 0.0, 0.0),
+        #                     )
         if self.include_end_effector_dist_model:
             ds = ca.vertcat(ds,
                             ca.vertcat(0.0, 0.0, 0.0),
@@ -584,7 +588,7 @@ class HydrusXiBase(RecedingHorizonBase):
     def get_cost_function(self, lin_acc_w=None, ang_acc_b=None):
         pass
 
-    def compute_trajectory(self, params, x_now, u_cmd, target_xyz, target_rpy, target_vxyz=np.array([[0.0, 0.0, 0.0]]).T, target_wrpy=np.array([[0.0, 0.0, 0.0]]).T, target_joint_angles=np.array([[np.pi/2, np.pi/2, np.pi/2]]).T, target_gimbal_angles=np.array([[np.pi, 0.0, np.pi, 0.0]]).T):
+    def compute_trajectory(self, params, x_now, u_cmd, target_xyz, target_rpy, target_vxyz=np.array([[0.0, 0.0, 0.0]]).T, target_wrpy=np.array([[0.0, 0.0, 0.0]]).T, target_joint_angles=np.array([[np.pi/2, np.pi/2, np.pi/2]]).T, target_gimbal_angles=np.array([[np.pi, 0.0, np.pi, 0.0]]).T, target_force=np.array([[0.0, 0.0, 0.0]]).T, target_torque=np.array([[0.0, 0.0, 0.0]]).T):
         """
         Convert current target pose to a reference trajectory over the entire horizon.
         Compute target quaternions and control reference from a target rotation and then 
@@ -607,10 +611,11 @@ class HydrusXiBase(RecedingHorizonBase):
         rot = tf.quaternion_matrix(q_inv)
         fg_w = np.array([0, 0, self.m * self.gravity, 0])    # World frame
         fg_b = rot @ fg_w                                       # Body frame
-        target_force = np.array([0, 0, self.m * self.gravity]).T
-        target_torque = np.array([[0.0, 0.0, 0.0]]).T
+        # target_force = np.array([0, 0, self.m * self.gravity]).T
+        # target_torque = np.array([[0.0, 0.0, 0.0]]).T
         model = super().get_acados_model()
-         
+        #print("target_force: ", target_force)
+        #print("target_torque: ", target_torque)
         f_opt = ca.SX.sym("f_opt", 4)  
         g_opt = ca.SX.sym("g_opt", 4) 
         opt = ca.vertcat(f_opt, g_opt)
@@ -620,17 +625,19 @@ class HydrusXiBase(RecedingHorizonBase):
                         ca.mtimes((self.tau_u_b - target_torque).T, (self.tau_u_b - target_torque)) + \
                         10*ca.mtimes((self.ft_c - self.f_ref).T, (self.ft_c - self.f_ref)) + \
                         10*ca.mtimes((self.g_s - self.g_ref).T, (self.g_s - self.g_ref))
-        func = ca.Function('wrench_fun', [model.p[4:30], model.x, model.u], [least_squares])
+        func = ca.Function('wrench_fun', [model.p[4:33], model.x, model.u], [least_squares])
         
-     
+        #print(params)
+        #print(model.p)
+        # print(model.u)
 
         x_fixed = ca.vertcat(x_now[0:16], g_opt)
         u_fixed = ca.vertcat(f_opt, u_cmd[4:8])
-        func_new = func(model.p[4:30], x_fixed, u_fixed)
+        func_new = func(model.p[4:33], x_fixed, u_fixed)
 
 
 
-        nlp = {'x': opt, 'p': model.p[4:30], 'f': func_new}
+        nlp = {'x': opt, 'p': model.p[4:33], 'f': func_new}
         opts = {
         'ipopt.print_level': 0,    
         'print_time': 0,            
@@ -681,12 +688,12 @@ class HydrusXiBase(RecedingHorizonBase):
         g_opt = ca.SX.sym("g_opt", 4)  
         wrench = ca.vertcat(ca.mtimes(self.rot_wb, self.fu_b), self.tau_u_b)
         least_squares = ca.mtimes((wrench - wrench_tgt).T, (wrench - wrench_tgt))
-        func = ca.Function('wrench_fun', [model.p[4:30], model.x, model.u], [least_squares])
+        func = ca.Function('wrench_fun', [model.p[4:33], model.x, model.u], [least_squares])
         
         x_fixed = ca.vertcat(x_now[0:16], g_opt)
-        func_new = func(model.p[4:30], x_fixed, u_cmd)
+        func_new = func(model.p[4:33], x_fixed, u_cmd)
 
-        nlp = {'x': g_opt, 'p': model.p[4:30], 'f': func_new}
+        nlp = {'x': g_opt, 'p': model.p[4:33], 'f': func_new}
         opts = {
         'ipopt.print_level': 0,    
         'print_time': 0,            
@@ -720,9 +727,9 @@ class HydrusXiBase(RecedingHorizonBase):
     
     def get_command_wrench(self, params, x_now, u_cmd):
         model = super().get_acados_model()
-        force_fun = ca.Function('force_fun', [model.p[4:30], model.x, model.u], [ca.mtimes(self.rot_c_1, ca.mtimes(self.rot_e1r1, self.ft_r1))])
+        force_fun = ca.Function('force_fun', [model.p[4:33], model.x, model.u], [ca.mtimes(self.rot_wb, self.fu_b)])
         force = np.squeeze(np.array(force_fun(params, x_now, u_cmd).full()))
-        torque_fun = ca.Function('torque_fun', [model.p[4:30], model.x, model.u], [ca.mtimes(self.rot_e1r1, self.ft_r1)])
+        torque_fun = ca.Function('torque_fun', [model.p[4:33], model.x, model.u], [self.tau_u_b])
         torque = np.squeeze(np.array(torque_fun(params, x_now, u_cmd).full()))
         #  + ca.cross(self.tran_c_1, ca.mtimes(self.rot_c_1, ca.mtimes(self.rot_e1r1, self.ft_r1)))
         #         + ca.cross(self.tran_c_2, ca.mtimes(self.rot_c_2, ca.mtimes(self.rot_e2r2, self.ft_r2)))
@@ -754,8 +761,8 @@ class HydrusXiBase(RecedingHorizonBase):
         model = super().get_acados_model()
         sum_momentum = ca.vertcat(self.m * self.v, ca.mtimes(self.I, self.w))
         N = ca.vertcat(self.m * ca.vertcat(0, 0, self.gravity), ca.cross(self.w, ca.mtimes(self.I, self.w)))
-        sum_momentum_fun = ca.Function('sum_momentum_fun', [model.p[4:30], model.x], [sum_momentum])
-        N_fun = ca.Function('N_fun', [model.p[4:30], model.x], [N])
+        sum_momentum_fun = ca.Function('sum_momentum_fun', [model.p[4:33], model.x], [sum_momentum])
+        N_fun = ca.Function('N_fun', [model.p[4:33], model.x], [N])
         return np.squeeze(np.array(sum_momentum_fun(params, x_now).full())), np.squeeze(np.array(N_fun(params, x_now).full())) 
 
     def get_end_effector_position(self, params, x_now):
@@ -806,7 +813,7 @@ class HydrusXiBase(RecedingHorizonBase):
         # TODO include fixed rotor arch
         # - State box constraints bx
         # -- Index for vx, vy, vz, wx, wy, wz, j1, j2, j3
-        ocp.constraints.idxbx = np.array([3, 4, 5, 10, 11, 12, 13, 14, 15])
+        ocp.constraints.idxbx = np.array([3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
 
         # -- Index for a1s, a2s, a3s, a4s
         # if self.tilt and self.include_servo_model:
@@ -830,7 +837,11 @@ class HydrusXiBase(RecedingHorizonBase):
              self.params["w_min"],
              self.params["j_min"],
              self.params["j_min"],
-             self.params["j_min"]])
+             self.params["j_min"],
+             -2*np.pi,
+             -2*np.pi,
+             -2*np.pi,
+             -2*np.pi])
 
         # if self.tilt and self.include_servo_model:
         #     ocp.constraints.lbx = np.append(ocp.constraints.lbx,
@@ -856,7 +867,11 @@ class HydrusXiBase(RecedingHorizonBase):
              self.params["w_max"],
              self.params["j_max"],
              self.params["j_max"],
-             self.params["j_max"]])
+             self.params["j_max"],
+             2*np.pi,
+             2*np.pi,
+             2*np.pi,
+             2*np.pi])
 
         # if self.tilt and self.include_servo_model:
         #     ocp.constraints.ubx = np.append(ocp.constraints.ubx,
@@ -1000,7 +1015,10 @@ class HydrusXiBase(RecedingHorizonBase):
         self.acados_init_p[0] = x_ref[6]  # qw
         # if len(self.phys.physical_param_list) != 24:
         #     raise ValueError("Physical parameters are not in the correct order. Please check the physical model.")
+
         self.acados_init_p[4:33] = np.array(self.phys.physical_param_list)
+        
+        
         ocp.constraints.x0 = x_ref
         ocp.cost.yref = np.concatenate((x_ref, u_ref))
         ocp.cost.yref_e = x_ref

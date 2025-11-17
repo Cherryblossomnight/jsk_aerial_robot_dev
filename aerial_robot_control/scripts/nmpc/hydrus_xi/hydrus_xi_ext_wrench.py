@@ -6,7 +6,7 @@ from hydrus_xi_base import HydrusXiBase
 from hydrus_xi import phys_param_hydrus_xi as phys_hydrus_xi
 
 
-class HydrusXiNormal(HydrusXiBase):
+class HydrusXiExtWrench(HydrusXiBase):
     """
     Controller Name: Tiltable Quadrotor NMPC including Servo and Thrust Model
     The controller itself is constructed in base class. This file is used to define the properties
@@ -17,7 +17,7 @@ class HydrusXiNormal(HydrusXiBase):
     """
     def __init__(self, overwrite: bool = False, phys=phys_hydrus_xi):
         # Model name
-        self.model_name = "hydrus_xi_normal"
+        self.model_name = "hydrus_xi_ext_wrench"
         self.phys = phys
 
         self.tilt = True
@@ -25,7 +25,7 @@ class HydrusXiNormal(HydrusXiBase):
         self.include_servo_derivative = False
         self.include_servo_dynamic = False
         self.include_thrust_model = False   # TODO extend to include_thrust_derivative
-        self.include_cog_dist_model = False
+        self.include_cog_dist_model = True
         self.include_cog_dist_parameter = False
         self.include_impedance = False
         self.include_end_effector_dist_model = False
