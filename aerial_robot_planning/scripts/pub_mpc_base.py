@@ -1,11 +1,12 @@
-'''
- Created by jinjie on 25/03/21.
-'''
+"""
+Created by jinjie on 25/03/21.
+"""
+
 from abc import ABC, abstractmethod
 import rospy
 
 from nav_msgs.msg import Odometry
-from util import check_first_data_received, TrackingErrorCalculator
+from util import topic_ready, check_first_data_received, TrackingErrorCalculator
 
 
 ##########################################
@@ -22,7 +23,7 @@ class MPCPubBase(ABC):
       - Abstract methods for building the MultiDOFJointTrajectory and checking finish conditions
     """
 
-    def __init__(self, robot_name: str, node_name: str, is_calc_rmse=True):
+    def __init__(self, robot_name: str, node_name: str, odom_frame_id: str, is_calc_rmse=True):
         # Basic config
         self.robot_name = robot_name
         self.node_name = node_name
@@ -42,7 +43,23 @@ class MPCPubBase(ABC):
 
         # Store latest odometry here
         self.uav_odom = None
-        self.odom_sub = rospy.Subscriber(f"/{robot_name}/uav/cog/odom", Odometry, self._sub_odom_callback)
+
+        # Subscribe to odometry
+        if odom_frame_id == "ee" and topic_ready(f"/{robot_name}/uav/ee_contact/odom", Odometry, timeout=1.0):
+            rospy.loginfo(f"{self.namespace}/{self.node_name}: Using /{robot_name}/uav/ee_contact/odom for odometry.")
+            self.odom_sub = rospy.Subscriber(f"/{robot_name}/uav/ee_contact/odom", Odometry, self._sub_odom_callback)
+        else:
+            if odom_frame_id == "cog":
+                rospy.loginfo(f"{self.namespace}/{self.node_name}: Using /{robot_name}/uav/cog/odom for odometry.")
+            elif odom_frame_id == "ee":
+                rospy.logwarn(
+                    f"{self.namespace}/{self.node_name}: /{robot_name}/uav/ee_contact/odom not available, "
+                    f"falling back to /{robot_name}/uav/cog/odom."
+                )
+            else:
+                rospy.logwarn(f"unsupported odom_frame_id {odom_frame_id}, using cog instead.")
+            self.odom_sub = rospy.Subscriber(f"/{robot_name}/uav/cog/odom", Odometry, self._sub_odom_callback)
+
         check_first_data_received(self, "uav_odom", robot_name)
 
         # Calculate tracking error
@@ -66,10 +83,7 @@ class MPCPubBase(ABC):
 
         # Timer for publishing
         self.ts_pt_pub = 0.02  # ~50Hz
-        self.tmr_pt_pub = rospy.Timer(
-            rospy.Duration.from_sec(self.ts_pt_pub),
-            self._timer_callback
-        )
+        self.tmr_pt_pub = rospy.Timer(rospy.Duration.from_sec(self.ts_pt_pub), self._timer_callback)
         rospy.loginfo(f"{self.namespace}/{self.node_name}: Timer started!")
 
     def _sub_odom_callback(self, msg: Odometry):
@@ -78,6 +92,29 @@ class MPCPubBase(ABC):
 
     def _timer_callback(self, timer_event: rospy.timer.TimerEvent):
         """Common timer callback that handles frequency checking and calls user-defined steps."""
+        # 0) Check if finished. If so, shutdown the timer and return.
+        if self.is_finished:
+            rospy.loginfo(f"{self.namespace}/{self.node_name}: is_finished is set to True!")
+
+            if hasattr(self, "track_err_calc"):
+                # Calculate RMSE of tracking error
+                pos_rmse_norm, pos_rmse, ang_rmse_norm, ang_rmse = self.track_err_calc.get_rmse_error()
+
+                rospy.loginfo(
+                    f"\033[1;36m{self.namespace}/{self.node_name}: RMSE of tracking error: \n"
+                    f"pos_err_norm = {pos_rmse_norm:.3f} m, \n"
+                    f"pos_err = {pos_rmse[0]:.3f} m, {pos_rmse[1]:.3f} m, {pos_rmse[2]:.3f} m, \n"
+                    f"ang_err_norm = {ang_rmse_norm:.3f} deg, \n"
+                    f"ang_err = {ang_rmse[0]:.3f} deg, {ang_rmse[1]:.3f} deg, {ang_rmse[2]:.3f} deg\033[0m"
+                )  # cyan highlight
+
+                self.track_err_calc.reset()
+
+            # Shutdown the timer
+            self.tmr_pt_pub.shutdown()
+
+            return
+
         # 1) Check frequency
         if (timer_event.last_duration is not None) and (self.ts_pt_pub < timer_event.last_duration):
             rospy.logwarn(
@@ -94,33 +131,17 @@ class MPCPubBase(ABC):
         if hasattr(self, "track_err_calc"):
             err_px, err_py, err_pz, err_roll, err_pitch, err_yaw = self.track_err_calc.update(self.uav_odom, traj_msg)
 
-            rospy.loginfo_throttle(1, f"{self.namespace}/{self.node_name}: Tracking error: "
-                                      f"pos_err = {err_px:.3f} m, {err_py:.3f} m, {err_pz:.3f} m, "
-                                      f"ang_err = {err_roll:.3f} deg, {err_pitch:.3f} deg, {err_yaw:.3f} deg")
+            rospy.loginfo_throttle(
+                1,
+                f"{self.namespace}/{self.node_name}: Tracking error: "
+                f"pos_err = {err_px:.3f} m, {err_py:.3f} m, {err_pz:.3f} m, "
+                f"ang_err = {err_roll:.3f} deg, {err_pitch:.3f} deg, {err_yaw:.3f} deg",
+            )
 
         # 3) Publish
         self.pub_trajectory_points(traj_msg)
 
-        # 4) Check if done from a child-class method
-        # is_finished can be also set by other function to quit, so we need to check it first
-        if self.is_finished:
-            rospy.loginfo(f"{self.namespace}/{self.node_name}: is_finished is set to True!")
-
-            if hasattr(self, "track_err_calc"):
-                # Calculate RMSE of tracking error
-                pos_rmse_norm, pos_rmse, ang_rmse_norm, ang_rmse = self.track_err_calc.get_rmse_error()
-
-                rospy.loginfo(f"\033[1;36m{self.namespace}/{self.node_name}: RMSE of tracking error: \n"
-                              f"pos_err_norm = {pos_rmse_norm:.3f} m, \n"
-                              f"pos_err = {pos_rmse[0]:.3f} m, {pos_rmse[1]:.3f} m, {pos_rmse[2]:.3f} m, \n"
-                              f"ang_err_norm = {ang_rmse_norm:.3f} deg, \n"
-                              f"ang_err = {ang_rmse[0]:.3f} deg, {ang_rmse[1]:.3f} deg, {ang_rmse[2]:.3f} deg\033[0m")  # cyan highlight
-
-                self.track_err_calc.reset()
-
-            # Shutdown the timer
-            self.tmr_pt_pub.shutdown()
-
+        # 4) Check if done from an overload method
         self.is_finished = self.check_finished(t_has_started)
 
     @abstractmethod

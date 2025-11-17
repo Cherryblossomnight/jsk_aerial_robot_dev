@@ -13,7 +13,7 @@
         <inertia
             ixx="0.02747704" iyy="0.02676088" izz="0.04047304"
             ixy="-0.00000599" ixz="0.00009626" iyz="0.00006750"/>
-      </inertial>   
+      </inertial>
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
         <geometry>
@@ -120,7 +120,7 @@
 
     ## thrust link (virtual)
     <link name="thrust${self}">
-      <inertial>      
+      <inertial>
         <origin xyz="0 0 0" rpy="0 0 0"/>
         <mass value="0.005"/>
         <inertia
@@ -143,7 +143,7 @@
       <dynamics damping="0.8" friction="0.0"/>
     </joint>
 
-    <transmission name="joint_tran${self}">3.141593
+    <transmission name="joint_tran${self}">
       <type>transmission_interface/SimpleTransmission</type>
       <joint name="gimbal${self}">
         <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
@@ -183,6 +183,7 @@
 
 <!-- Define beetle -->
   <xacro:arg name="robot_name" default="beetle-art-omni" />
+  <xacro:property name="robot_name" value="$(arg robot_name)"/>
 
   <xacro:beetle_center_link child1="1" child2="2" child3="3" child4="4"/>
   <xacro:beetle_thrust_link self="1" rotor_direction="1"/>
@@ -190,25 +191,31 @@
   <xacro:beetle_thrust_link self="3" rotor_direction="1"/>
   <xacro:beetle_thrust_link self="4" rotor_direction="-1"/>
 
-<!-- ============ End Effector =============== -->
-  <!-- Define a parameter to choose the end effector type: "fork" or "ball" -->
-  <xacro:arg name="end_effector" default="fork" />
-  <xacro:property name="end_effector" value="$(arg end_effector)" />
+  <!-- ============ End‑Effector (EE) =============== -->
 
-  <!-- Define the "end" link, which is positioned 0.3m along the Z axis relative to main_body -->
-  <link name="end">
-    <!-- Optionally, you can add inertial, collision, and visual information here -->
-  </link>
+  <!-- Select EE type:  fork | ball | sensor_ball | brush -->
+  <xacro:arg name="end_effector" default="fork"/>
+  <xacro:property name="end_effector" value="$(arg end_effector)"/>
 
-  <joint name="main_body_to_end" type="fixed">
+  <xacro:if value="${end_effector != 'fork' and end_effector != 'ball' and end_effector != 'sensor_ball'
+  and end_effector != 'brush' and end_effector != 'osmo'}">
+    <xacro:error>Invalid end_effector type: ${end_effector}. Must be one of: fork, ball, sensor_ball, brush, osmo.</xacro:error>
+  </xacro:if>
+
+  <!-- Fixed the flange that all tools attach to -->
+  <link name="ee_mount"/>
+  <joint name="body_to_ee_mount" type="fixed">
     <parent link="main_body"/>
-    <child link="end"/>
+    <child link="ee_mount"/>
     <origin xyz="0 0 0.1725" rpy="0 0 0"/>
   </joint>
 
-  <!-- Conditionally create the fork or ball link based on the parameter value -->
+  <!-- Tool‑agnostic contact frame (pose set inside each branch) -->
+  <link name="ee_contact"/>
+
+  <!-- ############# Fork tool ############# -->
   <xacro:if value="${end_effector == 'fork'}">
-    <!-- Define the fork link with mesh visualization -->
+    <!-- Tool geometry -->
     <link name="fork">
       <inertial>
         <origin xyz="0.00000000 0.06681059 -0.00005783" rpy="0 0 0"/>
@@ -224,15 +231,23 @@
       </visual>
     </link>
 
-    <joint name="end_to_fork" type="fixed">
-      <parent link="end"/>
+    <!-- Mount fork to the flange -->
+    <joint name="ee_mount_to_fork" type="fixed">
+      <parent link="ee_mount"/>
       <child link="fork"/>
-      <origin xyz="0 0 0" rpy="1.570796 0 -1.570796"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Contact point for the fork tips -->
+    <joint name="fork_to_ee_contact" type="fixed">
+      <parent link="fork"/>
+      <child link="ee_contact"/>
+      <origin xyz="0 0 0.104" rpy="0 0 0"/>
     </joint>
   </xacro:if>
 
+  <!-- ############# Ball tool ############# -->
   <xacro:if value="${end_effector == 'ball'}">
-    <!-- Define the ball link with mesh visualization -->
     <link name="ball">
       <inertial>
         <origin xyz="0.00000000 0.08052689 0.00000000" rpy="0 0 0"/>
@@ -243,20 +258,83 @@
       </inertial>
       <visual>
         <geometry>
-          <mesh filename="package://beetle_omni/urdf/mesh/end_effector_origin_ball.dae" scale="1 1 1"/>
+          <mesh filename="package://beetle_omni/urdf/mesh/end_effector_ball.dae" scale="1 1 1"/>
         </geometry>
       </visual>
     </link>
 
-    <joint name="end_to_ball" type="fixed">
-      <parent link="end"/>
+    <joint name="ee_mount_to_ball" type="fixed">
+      <parent link="ee_mount"/>
       <child link="ball"/>
-      <origin xyz="0 0 0" rpy="1.570796 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Contact point at the ball’s center -->
+    <joint name="ball_to_ee_contact" type="fixed">
+      <parent link="ball"/>
+      <child link="ee_contact"/>
+      <origin xyz="0 0 0.11" rpy="0 0 0"/>
     </joint>
   </xacro:if>
 
+  <!-- ############# Sensor‑ball tool ############# -->
+  <xacro:if value="${end_effector == 'sensor_ball'}">
+
+    <!-- Wrench sensor -->
+    <link name="wrench_sensor">
+      <inertial>
+        <origin xyz="0.00000000 0.00000000 -0.01500000" rpy="0 0 0"/>
+        <mass value="0.285"/>
+        <inertia
+                ixx="0.00008773" iyy="0.00012377" izz="0.00016573"
+                ixy="0.00000000" ixz="0.00000328" iyz="0.00000000"/>
+      </inertial>
+      <visual>
+        <geometry>
+          <mesh filename="package://beetle_omni/urdf/mesh/wrench_sensor_pfs055ya501u6.dae" scale="1 1 1"/>
+        </geometry>
+      </visual>
+    </link>
+
+    <joint name="ee_mount_to_sensor" type="fixed">
+      <parent link="ee_mount"/>
+      <child link="wrench_sensor"/>
+      <origin xyz="0 0 0.031" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Ball attached to the sensor -->
+    <link name="ball">
+      <!-- (same as plain ball) -->
+      <inertial>
+        <origin xyz="0.00000000 0.08052689 0.00000000" rpy="0 0 0"/>
+        <mass value="0.1030"/>
+        <inertia
+                ixx="0.00020646" iyy="0.00008167" izz="0.00020646"
+                ixy="0.00000000" ixz="0.00000000" iyz="0.00000000"/>
+      </inertial>
+      <visual>
+        <geometry>
+          <mesh filename="package://beetle_omni/urdf/mesh/end_effector_ball.dae" scale="1 1 1"/>
+        </geometry>
+      </visual>
+    </link>
+
+    <joint name="sensor_to_ball" type="fixed">
+      <parent link="wrench_sensor"/>
+      <child link="ball"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Contact point at ball tip -->
+    <joint name="ball_to_ee_contact" type="fixed">
+      <parent link="ball"/>
+      <child link="ee_contact"/>
+      <origin xyz="0 0 0.11" rpy="0 0 0"/>
+    </joint>
+  </xacro:if>
+
+  <!-- ############# Brush tool ############# -->
   <xacro:if value="${end_effector == 'brush'}">
-    <!-- Define the brush link with mesh visualization -->
     <link name="brush">
       <inertial>
         <origin xyz="0.00000000 0.06565796 -0.00001172" rpy="0 0 0"/>
@@ -272,11 +350,55 @@
       </visual>
     </link>
 
-    <joint name="end_to_brush" type="fixed">
-      <parent link="end"/>
+    <joint name="ee_mount_to_brush" type="fixed">
+      <parent link="ee_mount"/>
       <child link="brush"/>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </joint>
+
+    <!-- Contact frame at the bristle tip -->
+    <joint name="brush_to_ee_contact" type="fixed">
+      <parent link="brush"/>
+      <child link="ee_contact"/>
+      <origin xyz="0 0 0.144" rpy="0 0 0"/>
+    </joint>
+  </xacro:if>
+
+  <!-- ############# DJI OSMO Action 4 ############# -->
+  <xacro:include filename="$(find beetle_omni)/urdf/osmo_camera.xacro"/>
+
+  <xacro:if value="${end_effector == 'osmo'}">
+    <!-- Contact frame at the bristle tip, required by the outer framework -->
+    <joint name="osmo_to_ee_contact" type="fixed">
+      <parent link="osmo"/>
+      <child link="ee_contact"/>
+      <origin xyz="0 0 0.045" rpy="0 0 0"/>
+    </joint>
+
+    <!-- 3) OSMO link and joints -->
+    <link name="osmo">
+      <inertial>
+        <origin xyz="-0.01764 0.02342 0.01321" rpy="0 0 0"/>
+        <mass value="0.1911"/>
+        <inertia
+                ixx="0.0001070" iyy="0.0001779" izz="0.0001116"
+                ixy="0.0" ixz="0.0" iyz="0.0"/>
+      </inertial>
+      <visual>
+        <geometry>
+          <mesh filename="package://beetle_omni/urdf/mesh/end_effector_osmo_camera.dae" scale="1 1 1"/>
+        </geometry>
+      </visual>
+    </link>
+    <joint name="ee_mount_to_osmo" type="fixed">
+      <parent link="ee_mount"/>
+      <child link="osmo"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <!-- 4) Attach the reusable camera macro -->
+    <xacro:osmo_rgb_camera parent_link="osmo" robot_ns="${robot_name}"/>
+
   </xacro:if>
 
 </robot>

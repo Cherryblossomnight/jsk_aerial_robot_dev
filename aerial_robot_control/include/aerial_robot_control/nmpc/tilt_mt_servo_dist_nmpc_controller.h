@@ -10,6 +10,7 @@
 #include "aerial_robot_control/wrench_est/wrench_est_i_term.h"
 
 #include "geometry_msgs/WrenchStamped.h"
+#include "geometry_msgs/Vector3Stamped.h"
 
 using NMPCControlDynamicConfig = dynamic_reconfigure::Server<aerial_robot_control::NMPCConfig>;
 
@@ -29,31 +30,32 @@ public:
 
   bool update() override;
 
-  void reset() override;
-
   aerial_robot_control::WrenchEstITerm wrench_est_i_term_;  // I term is indispensable to eliminate steady error.
 
   boost::shared_ptr<pluginlib::ClassLoader<aerial_robot_control::WrenchEstActuatorMeasBase>> wrench_est_loader_ptr_;
   boost::shared_ptr<aerial_robot_control::WrenchEstActuatorMeasBase> wrench_est_ptr_;
 
 protected:
-  bool if_use_est_wrench_4_control_;
+  bool if_use_est_wrench_4_control_ = false;
+
   ros::Publisher pub_disturb_wrench_;  // for disturbance wrench
 
   int idx_p_dist_end_ = 0;
 
   void initPlugins() override;
+  void resetPlugins() override;
 
   void initNMPCParams() override;
 
   void prepareNMPCParams() override;
 
-  std::vector<double> meas2VecX() override;
+  std::vector<double> meas2VecX(bool is_modified_by_traj_frame) override;
 
   void initAllocMat() override;
 
   /* external wrench estimation */
-  virtual void calcDisturbWrench();
+  void updateDisturbWrench() const;
+
   void pubDisturbWrench() const;
 
   /* I Term */

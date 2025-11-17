@@ -17,12 +17,16 @@ void nmpc::TiltMtServoDistNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle n
   ros::NodeHandle control_nh(nh_, "controller");
   getParam<bool>(control_nh, "if_use_est_wrench_4_control", if_use_est_wrench_4_control_, false);
 
-  pub_disturb_wrench_ = nh_.advertise<geometry_msgs::WrenchStamped>("disturbance_wrench", 1);
+  pub_disturb_wrench_ = nh_.advertise<geometry_msgs::WrenchStamped>("ext_wrench_est/value", 1);
 }
 
 bool nmpc::TiltMtServoDistNMPC::update()
 {
-  calcDisturbWrench();
+  // update the disturbance wrench only after activation. The updateDisturbWrench() should be called before the
+  // TiltMtServoNMPC::update() to ensure that the disturbance wrench is updated before the NMPC solver uses it.
+  if (!ControlBase::update())
+    return false;
+  updateDisturbWrench();
 
   // Note that the meas2VecX() function is called in the update() function. And since it always get the latest info
   // from the estimator, the NMPC result should not be influenced by the disturbance wrench.
@@ -35,10 +39,8 @@ bool nmpc::TiltMtServoDistNMPC::update()
   return true;
 }
 
-void nmpc::TiltMtServoDistNMPC::reset()
+void nmpc::TiltMtServoDistNMPC::resetPlugins()
 {
-  TiltMtServoNMPC::reset();
-
   wrench_est_i_term_.reset();
 
   if (wrench_est_ptr_ != nullptr)
@@ -85,11 +87,11 @@ void nmpc::TiltMtServoDistNMPC::updateITerm()
                      mpc_solver_ptr_->xo_.at(1).at(2));
   tf::Vector3 target_pos = pos_x0 + (pos_x1 - pos_x0) * t_nmpc_samp_ / t_nmpc_step_;
 
-  tf::Quaternion quat_x0(mpc_solver_ptr_->xo_.at(0).at(7), mpc_solver_ptr_->xo_.at(0).at(8), mpc_solver_ptr_->xo_.at(0).at(9),
-                         mpc_solver_ptr_->xo_.at(0).at(6));
+  tf::Quaternion quat_x0(mpc_solver_ptr_->xo_.at(0).at(7), mpc_solver_ptr_->xo_.at(0).at(8),
+                         mpc_solver_ptr_->xo_.at(0).at(9), mpc_solver_ptr_->xo_.at(0).at(6));
   quat_x0.normalize();
-  tf::Quaternion quat_x1(mpc_solver_ptr_->xo_.at(1).at(7), mpc_solver_ptr_->xo_.at(1).at(8), mpc_solver_ptr_->xo_.at(1).at(9),
-                         mpc_solver_ptr_->xo_.at(1).at(6));
+  tf::Quaternion quat_x1(mpc_solver_ptr_->xo_.at(1).at(7), mpc_solver_ptr_->xo_.at(1).at(8),
+                         mpc_solver_ptr_->xo_.at(1).at(9), mpc_solver_ptr_->xo_.at(1).at(6));
   quat_x1.normalize();
   tf::Quaternion target_q = quat_x0.slerp(quat_x1, t_nmpc_samp_ / t_nmpc_step_);
 
@@ -107,35 +109,29 @@ void nmpc::TiltMtServoDistNMPC::prepareNMPCParams()
 {
   TiltMtServoNMPC::prepareNMPCParams();
 
+  // This form of I Term can always be activated, no need to be shut down when the external wrench appears.
   updateITerm();
   auto mdl_error_force_w = wrench_est_i_term_.getDistForceW();
   auto mdl_error_torque_cog = wrench_est_i_term_.getDistTorqueCOG();
 
-  vector<int> idx = { idx_p_phys_end_ + 1, idx_p_phys_end_ + 2, idx_p_phys_end_ + 3,
-                      idx_p_phys_end_ + 4, idx_p_phys_end_ + 5, idx_p_phys_end_ + 6 };
   vector<double> p = { mdl_error_force_w.x,    mdl_error_force_w.y,    mdl_error_force_w.z,
                        mdl_error_torque_cog.x, mdl_error_torque_cog.y, mdl_error_torque_cog.z };
-  mpc_solver_ptr_->setParamSparseAllStages(idx, p);
+  mpc_solver_ptr_->setParameters(p, idx_p_phys_end_ + 1);
 }
 
-std::vector<double> nmpc::TiltMtServoDistNMPC::meas2VecX()
+std::vector<double> nmpc::TiltMtServoDistNMPC::meas2VecX(bool is_modified_by_traj_frame)
 {
+  vector<double> bx0 = TiltMtServoNMPC::meas2VecX(is_modified_by_traj_frame);
+
   /* disturbance rejection */
   geometry_msgs::Vector3 external_force_w;     // default: 0, 0, 0
   geometry_msgs::Vector3 external_torque_cog;  // default: 0, 0, 0
 
-  auto nav_state = navigator_->getNaviState();
-  if (if_use_est_wrench_4_control_ && nav_state == aerial_robot_navigation::HOVER_STATE)
+  if (if_use_est_wrench_4_control_)
   {
-    if (!wrench_est_ptr_->getOffsetFlag())
-      wrench_est_ptr_->toggleOffsetFlag();
-
-    // the external wrench is only added when the robot is in the hover state
     external_force_w = wrench_est_ptr_->getDistForceW();
     external_torque_cog = wrench_est_ptr_->getDistTorqueCOG();
   }
-
-  vector<double> bx0 = TiltMtServoNMPC::meas2VecX();
 
   bx0[13 + joint_num_ + 0] = external_force_w.x;
   bx0[13 + joint_num_ + 1] = external_force_w.y;
@@ -147,29 +143,24 @@ std::vector<double> nmpc::TiltMtServoDistNMPC::meas2VecX()
   return bx0;
 }
 
-void nmpc::TiltMtServoDistNMPC::calcDisturbWrench()
+void nmpc::TiltMtServoDistNMPC::updateDisturbWrench() const
 {
-  /* update the external wrench estimator based on the Nav State */
-  auto nav_state = navigator_->getNaviState();
-
-  if (nav_state != aerial_robot_navigation::TAKEOFF_STATE && nav_state != aerial_robot_navigation::HOVER_STATE &&
-      nav_state != aerial_robot_navigation::LAND_STATE)
+  if (wrench_est_ptr_ == nullptr)
+  {
+    ROS_ERROR("wrench_est_ptr_ is nullptr, please check the plugin loading.");
     return;
+  }
 
-  if (estimator_->getPos(Frame::COG, estimate_mode_).z() < 0.3)  // TODO: change to a state: IN_AIR
-    return;
+  auto vel = estimator_->getVel(Frame::COG, estimate_mode_);
+  auto ang_vel = estimator_->getAngularVel(Frame::COG, estimate_mode_);
 
-  /* get external wrench */
-  if (wrench_est_ptr_ != nullptr)
-    wrench_est_ptr_->update();
-  else
-    ROS_ERROR("wrench_est_ptr_ is nullptr");
+  wrench_est_ptr_->update(vel, ang_vel);
 }
 
 void nmpc::TiltMtServoDistNMPC::pubDisturbWrench() const
 {
   geometry_msgs::WrenchStamped dist_wrench_;
-  dist_wrench_.header.frame_id = "beetle1/cog";
+  dist_wrench_.header.frame_id = nh_.getNamespace().substr(1) + "/cog";
 
   auto ext_force_w = wrench_est_ptr_->getDistForceW();
   dist_wrench_.wrench.torque = wrench_est_ptr_->getDistTorqueCOG();
@@ -182,7 +173,6 @@ void nmpc::TiltMtServoDistNMPC::pubDisturbWrench() const
   dist_wrench_.wrench.force.z = tf_dist_force_cog.z();
 
   dist_wrench_.header.stamp = ros::Time::now();
-
   pub_disturb_wrench_.publish(dist_wrench_);
 }
 

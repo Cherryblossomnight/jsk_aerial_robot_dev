@@ -4,8 +4,10 @@
 
 2. run the test code
 ```bash
-python -m unittest tilt_qd/test_nmpc.py
+python -m unittest test_nmpc.py
 ```
+
+Note: If you want to update the ground truth, you need to set self.save_data to True in test_nmpc.py.
 
 3. roslaunch the beetle-omni, do
  - tracking normal traj.

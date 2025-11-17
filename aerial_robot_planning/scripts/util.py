@@ -1,9 +1,10 @@
-'''
- Created by jiaxuan and jinjie on 25/01/22.
-'''
+"""
+Created by jiaxuan and jinjie on 25/01/22.
+"""
 
 from functools import wraps
 from typing import Optional
+import pandas as pd
 
 import numpy as np
 import rospy
@@ -16,9 +17,37 @@ from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point, Quaternion, PoseStamped
 
 
+def read_csv_traj(path, nrows=None):
+    # please read READEME.md in tilt_qd_csv_trajs for the csv file format
+    non_data_row_num = 0
+    with open(path, "r") as f:
+        robot_line = f.readline().strip().split(",")
+        frame_id_line = f.readline().strip().split(",")
+        child_frame_id_line = f.readline().strip().split(",")
+        non_data_row_num += 3
+
+        if robot_line[0] != "robot" or frame_id_line[0] != "frame_id" or child_frame_id_line[0] != "child_frame_id":
+            raise ValueError("CSV file format error: first three lines must be 'robot', 'frame_id', 'child_frame_id'")
+        robot = robot_line[1] if len(robot_line) > 1 else None
+        frame_id = frame_id_line[1] if len(frame_id_line) > 1 else None
+        child_frame_id = child_frame_id_line[1] if len(child_frame_id_line) > 1 else None
+
+    if nrows is not None:
+        df = pd.read_csv(path, skiprows=non_data_row_num, nrows=nrows)
+    else:
+        df = pd.read_csv(path, skiprows=non_data_row_num)
+
+    # check each column has a header
+    for col in df.columns:
+        if col.strip() == "":
+            raise ValueError("CSV file format error: all columns must have a header")
+
+    return robot, frame_id, child_frame_id, df
+
+
 def check_first_data_received(obj: object, attr: str, object_name: str):
     """
-    Waits until the position is initialized. Logs a message repeatedly
+    Waits until the position is initialized. Logs a message repeatedly  TODO: use rospy.wait_for_message instead?
     :param obj:  The object to check the position of
     :param attr:  The attribute of the object to check
     :param object_name:  The name of the object being tracked
@@ -30,6 +59,14 @@ def check_first_data_received(obj: object, attr: str, object_name: str):
 
     if getattr(obj, attr) is not None:
         rospy.loginfo(f"{object_name} '{attr}' msg is received for the first time")
+
+
+def topic_ready(topic_name, msg_type, timeout=1.0):
+    try:
+        rospy.wait_for_message(topic_name, msg_type, timeout=timeout)
+        return True
+    except rospy.ROSException:
+        return False
 
 
 class TopicNotAvailableError(Exception):
@@ -49,7 +86,7 @@ def check_topic_subscription(func):
     return wrapper
 
 
-def check_traj_info(x: np.ndarray, if_return_path=False) -> Optional[Path]:
+def check_traj_info(t: np.ndarray, x: np.ndarray, if_return_path=False) -> Optional[Path]:
     """
     Check trajectory information and print out:
       - Overall time (number of time steps, assuming dt = 1 per step).
@@ -65,8 +102,7 @@ def check_traj_info(x: np.ndarray, if_return_path=False) -> Optional[Path]:
     print("\n===== Checking Trajectory Information =====")
     # --- Overall Time ---
     total_time_steps = x.shape[0]
-    # Assuming each row represents 1 time unit.
-    print("Overall time: {} time steps".format(total_time_steps))
+    print(f"Overall time: {t[-1]} s; Data number: {total_time_steps}")
 
     # --- Position ---
     # Positions are columns 0, 1, 2.
@@ -90,7 +126,7 @@ def check_traj_info(x: np.ndarray, if_return_path=False) -> Optional[Path]:
     print("Velocity (vz): max = {:.3f}".format(np.max(vz)))
 
     # Compute overall speed v = sqrt(vx^2 + vy^2 + vz^2)
-    v = np.sqrt(vx ** 2 + vy ** 2 + vz ** 2)
+    v = np.sqrt(vx**2 + vy**2 + vz**2)
     print("Speed (v): max = {:.3f}".format(np.max(v)))
 
     # --- Orientation ---
@@ -100,7 +136,7 @@ def check_traj_info(x: np.ndarray, if_return_path=False) -> Optional[Path]:
     quats_xyzw = np.hstack((quats[:, 1:], quats[:, 0:1]))
 
     # Convert quaternion to Euler angles in degrees using the 'xyz' (roll, pitch, yaw) convention
-    eulers = R.from_quat(quats_xyzw).as_euler('xyz', degrees=True)
+    eulers = R.from_quat(quats_xyzw).as_euler("xyz", degrees=True)
     roll = eulers[:, 0]
     pitch = eulers[:, 1]
     yaw = eulers[:, 2]
@@ -120,7 +156,7 @@ def check_traj_info(x: np.ndarray, if_return_path=False) -> Optional[Path]:
     print("Angular Velocity (wz): max = {:.3f}".format(np.max(wz)))
 
     # Compute overall angular speed w = sqrt(wx^2 + wy^2 + wz^2)
-    w = np.sqrt(wx ** 2 + wy ** 2 + wz ** 2)
+    w = np.sqrt(wx**2 + wy**2 + wz**2)
     print("Angular speed (w): max = {:.3f}".format(np.max(w)))
     print("===========================================\n")
 
@@ -175,9 +211,9 @@ class TrackingErrorCalculator:
         all_pos_err_np = np.array(self.all_pos_err)
         all_ang_err_np = np.array(self.all_ang_err)
 
-        pos_rmse = np.sqrt(np.mean(all_pos_err_np ** 2, axis=1))
+        pos_rmse = np.sqrt(np.mean(all_pos_err_np**2, axis=1))
         pos_rmse_norm = np.linalg.norm(pos_rmse)
-        ang_rmse = np.sqrt(np.mean(all_ang_err_np ** 2, axis=1))
+        ang_rmse = np.sqrt(np.mean(all_ang_err_np**2, axis=1))
         ang_rmse_norm = np.linalg.norm(ang_rmse)
 
         return pos_rmse_norm, pos_rmse, ang_rmse_norm, ang_rmse
@@ -190,10 +226,12 @@ class TrackingErrorCalculator:
         """
         # Current pose
         cur_pos = uav_odom.pose.pose.position
-        q_cur = [uav_odom.pose.pose.orientation.x,
-                 uav_odom.pose.pose.orientation.y,
-                 uav_odom.pose.pose.orientation.z,
-                 uav_odom.pose.pose.orientation.w]
+        q_cur = [
+            uav_odom.pose.pose.orientation.x,
+            uav_odom.pose.pose.orientation.y,
+            uav_odom.pose.pose.orientation.z,
+            uav_odom.pose.pose.orientation.w,
+        ]
 
         # Extract reference pose
         try:
@@ -230,8 +268,7 @@ class TrackingErrorCalculator:
         return dx, dy, dz, euler_err[0], euler_err[1], euler_err[2]
 
 
-def create_wall_markers(points, thickness=0.1, height=2.0,
-                        frame_id="world", ns="walls", color=None):
+def create_wall_markers(points, thickness=0.1, height=2.0, frame_id="world", ns="walls", color=None):
     """
     Build a MarkerArray in which each polygon edge is rendered as a thin box.
 
@@ -310,12 +347,14 @@ def pub_0066_wall_rviz(cleanup=False):
         return
 
     # ---- Corner points of the walls (m) ----
-    pts = [(-2.2, -2.9),
-           (3.9, -2.9),
-           (3.9, 3.4),
-           (-3.4, 3.4),
-           (-3.4, -0.4),
-           (-2.2, -0.4), ]
+    pts = [
+        (-2.2, -2.9),
+        (3.9, -2.9),
+        (3.9, 3.4),
+        (-3.4, 3.4),
+        (-3.4, -0.4),
+        (-2.2, -0.4),
+    ]
     # Close the polygon by repeating the first point
     pts.append(pts[0])
     # ----------------------------------------
@@ -325,11 +364,13 @@ def pub_0066_wall_rviz(cleanup=False):
     rospy.loginfo("Wall markers published on topic 'walls'. Open RViz and add a 'Marker' display.")
 
 
-def create_hand_markers(poses,
-                        mesh_resource="package://aerial_robot_planning/meshes/plastic_hand_9cm_wide.dae",
-                        frame_id="world",
-                        ns="hand_mesh",
-                        scale=(1.0, 1.0, 1.0)):
+def create_hand_markers(
+    poses,
+    mesh_resource="package://aerial_robot_planning/meshes/plastic_hand_9cm_wide.dae",
+    frame_id="world",
+    ns="hand_mesh",
+    scale=(1.0, 1.0, 1.0),
+):
     """
     Build a MarkerArray that places one mesh for every pose in *poses*.
 
@@ -344,9 +385,7 @@ def create_hand_markers(poses,
     for idx, (x, y, z, r_deg, p_deg, y_deg) in enumerate(poses):
         # Convert Euler angles (degrees) to quaternion (xyzw scalar-last)
         quat_xyzw = tf.transformations.quaternion_from_euler(
-            math.radians(r_deg),
-            math.radians(p_deg),
-            math.radians(y_deg)
+            math.radians(r_deg), math.radians(p_deg), math.radians(y_deg)
         )
 
         m = Marker()
@@ -387,7 +426,7 @@ def pub_hand_markers_rviz(viz_type):
         markers.markers.append(m)
 
         pub.publish(markers)
-        rospy.loginfo("Wall markers deleted on topic 'walls'.")
+        rospy.loginfo("Hand markers deleted on topic 'hand_markers'.")
         return
 
     # ---- Hand poses (m, deg) ----

@@ -15,8 +15,9 @@ find_package(catkin REQUIRED COMPONENTS
         aerial_robot_estimation
         aerial_robot_model
         aerial_robot_msgs
-        gimbalrotor
         diagnostic_msgs
+        pluginlib
+        roscpp
 )
 
 ## Uncomment this if the package has a setup.py. This macro ensures

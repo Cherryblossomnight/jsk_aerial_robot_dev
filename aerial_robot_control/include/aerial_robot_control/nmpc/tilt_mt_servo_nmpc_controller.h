@@ -104,6 +104,8 @@ protected:
   Eigen::MatrixXd alloc_mat_pinv_;
 
   bool is_traj_tracking_ = false;  // TODO: tmp value. should be combined with inner traj. tracking in the future
+  trajectory_msgs::MultiDOFJointTrajectory last_traj_msg_;
+  string traj_child_frame_id_ = "cog";
 
   aerial_robot_msgs::PredXU x_u_ref_;  // TODO: maybe we should remove x_u_ref_ and use xr_ & ur_ inside mpc_solver_ptr_
   spinal::FourAxisCommand flight_cmd_;
@@ -119,11 +121,15 @@ protected:
   bool is_set_fix_rotor_ = false;
   aerial_robot_msgs::FixRotor fix_rotor_msg_;
 
+  // For different vel during takeoff and landing
+  bool has_restored_vel_ = false;  // whether the velocity is restored to set value when hovering
+  double vel_max_, vel_min_, vel_limit_takeoff_;
+
   /* initialize() */
-  virtual void initPlugins() {};
-  virtual void initGeneralParams();
-  virtual void initNMPCCostW();
-  virtual void initNMPCConstraints();
+  void initGeneralParams() override;
+  void initNMPCCostW() override;
+  void initNMPCConstraints() override;
+
   void setControlMode();
   virtual inline void initActuatorStates()
   {
@@ -131,18 +137,22 @@ protected:
   }
 
   /* activate() */
+  void initNMPCParams() override;
+
   virtual void initAllocMat();
-  virtual void initNMPCParams();
   void updateInertialParams();
   std::vector<double> PhysToNMPCParams() const;
+  void modifyVelConstraints(double vel_min, double vel_max) const;
 
   /* update() */
   void controlCore() override;
   void sendCmd() override;
 
   // controlCore()
-  void prepareNMPCRef();
-  virtual void prepareNMPCParams();
+  void prepareNMPCRef() override;
+  void prepareNMPCParams() override;
+
+  void setPointRefFromNavigator(bool is_shifted_not_set_all);
   void setXrUrRef(const tf::Vector3& ref_pos_i, const tf::Vector3& ref_vel_i, const tf::Vector3& ref_acc_i,
                   const tf::Quaternion& ref_quat_ib, const tf::Vector3& ref_omega_b, const tf::Vector3& ref_ang_acc_b,
                   const int& horizon_idx);
@@ -163,13 +173,32 @@ protected:
 
   /* utils */
   // get functions
-  double getCommand(int idx_u, double T_horizon = 0.0);
+  double getCommand(int idx_u, double T_horizon = 0.0) const;
 
   // conversion functions
-  std::vector<double> meas2VecX() override;
+  std::vector<double> meas2VecX() override
+  {
+    return meas2VecX(false);
+  }
+
+  virtual std::vector<double> meas2VecX(bool is_modified_by_traj_frame);
+
+  // ensure the continuity of servo angles
+  double ensureOneServoContinuity(double a_ref, int idx) const;
+  std::vector<double> ensureAllServoContinuity(std::vector<double>& a_ref_vec) const;
 
   // debug functions
   void printPhysicalParams();
+
+  // check functions
+  static bool isAlmostEqual(const double a, const double b, const double epsilon = 1e-6)
+  {
+    return std::fabs(a - b) < epsilon;
+  }
+
+  bool isMulDOFJointTrajPtEqual(const trajectory_msgs::MultiDOFJointTrajectoryPoint& a,
+                                const trajectory_msgs::MultiDOFJointTrajectoryPoint& b, bool if_compare_time = true,
+                                double epsilon = 1e-6);
 
 private:
   tf::Quaternion quat_prev_;  // To deal with the discontinuity of the quaternion.

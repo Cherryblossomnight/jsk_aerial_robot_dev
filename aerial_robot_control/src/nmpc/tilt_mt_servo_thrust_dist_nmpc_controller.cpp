@@ -88,6 +88,7 @@ void nmpc::TiltMtServoThrustDistNMPC::initNMPCConstraints()
   getParam<double>(nmpc_nh, "a_max", servo_angle_max, 3.1416);
   getParam<double>(nmpc_nh, "a_min", servo_angle_min, -3.1416);
 
+  // lbx and ubx
   std::vector<int> idxbx = mpc_solver_ptr_->getConstraintsIdxbx();
   std::vector<int> idxbx_desired = { 3, 4, 5, 10, 11, 12 };
   idxbx_desired.resize(6 + joint_num_ + motor_num_);
@@ -122,6 +123,17 @@ void nmpc::TiltMtServoThrustDistNMPC::initNMPCConstraints()
   mpc_solver_ptr_->setConstraintsLbx(lbx);
   mpc_solver_ptr_->setConstraintsUbx(ubx);
 
+  // lbxe and ubxe
+  std::vector<int> idxbxe = mpc_solver_ptr_->getConstraintsIdxbxe();
+  std::vector<int> idxbxe_desired = idxbx_desired;
+  if (idxbxe.size() != idxbxe_desired.size() || !std::equal(idxbxe.begin(), idxbxe.end(), idxbxe_desired.begin()))
+  {
+    ROS_ERROR("idxbx_end is not equal to idxbx_end_desired, we cannot set constraints lbxe and ubxe!");
+  }
+  mpc_solver_ptr_->setConstraintsLbxe(lbx);
+  mpc_solver_ptr_->setConstraintsUbxe(ubx);
+
+  // lbu and ubu
   std::vector<int> idxbu = mpc_solver_ptr_->getConstraintsIdxbu();
   std::vector<int> idxbu_desired(motor_num_ + joint_num_);
   for (int i = 0; i < motor_num_; i++)
@@ -196,24 +208,19 @@ void nmpc::TiltMtServoThrustDistNMPC::allocateToXU(const tf::Vector3& ref_pos_i,
   }
 }
 
-std::vector<double> nmpc::TiltMtServoThrustDistNMPC::meas2VecX()
+std::vector<double> nmpc::TiltMtServoThrustDistNMPC::meas2VecX(bool is_modified_by_traj_frame)
 {
   /* disturbance rejection */
   geometry_msgs::Vector3 external_force_w;     // default: 0, 0, 0
   geometry_msgs::Vector3 external_torque_cog;  // default: 0, 0, 0
 
-  auto nav_state = navigator_->getNaviState();
-  if (if_use_est_wrench_4_control_ && nav_state == aerial_robot_navigation::HOVER_STATE)
+  if (if_use_est_wrench_4_control_)
   {
-    if (!wrench_est_ptr_->getOffsetFlag())
-      wrench_est_ptr_->toggleOffsetFlag();
-
-    // the external wrench is only added when the robot is in the hover state
     external_force_w = wrench_est_ptr_->getDistForceW();
     external_torque_cog = wrench_est_ptr_->getDistTorqueCOG();
   }
 
-  auto bx0 = TiltMtServoNMPC::meas2VecX();
+  auto bx0 = TiltMtServoNMPC::meas2VecX(is_modified_by_traj_frame);
 
   for (int i = 0; i < motor_num_; i++)
     bx0[13 + joint_num_ + i] = thrust_meas_[i];

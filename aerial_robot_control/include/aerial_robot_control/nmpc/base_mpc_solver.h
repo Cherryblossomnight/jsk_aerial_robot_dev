@@ -9,6 +9,7 @@
 #include <sstream>
 #include <vector>
 #include <iostream>
+#include <numeric>
 
 #include "acados/utils/math.h"
 #include "acados/utils/print.h"
@@ -32,8 +33,6 @@ private:
   {
     std::ostringstream oss;
     oss << "acados returned status " << status << ". Exiting." << std::endl;
-    oss << "If you are using impedance NMPC controller, please check if the M parameter is set. "
-           "Otherwise the dividend is zero.";
     return oss.str();
   }
 };
@@ -75,12 +74,16 @@ public:
     setRTIPhase();
   };
 
-  void reset(const std::vector<std::vector<double>>& x_init, const std::vector<std::vector<double>>& u_init)
+  /* Note: extract resetXrUr out of resetSolver since the xr & ur might be different from x & u in the solver.
+   * For example, for EE-centric NMPC, the xr & ur are in the EE frame but x & u are in the CoG frame. */
+  void resetXrUr(const std::vector<std::vector<double>>& xr_init, const std::vector<std::vector<double>>& ur_init)
   {
-    // reset ref
-    xr_ = x_init;
-    ur_ = u_init;
+    xr_ = xr_init;
+    ur_ = ur_init;
+  }
 
+  void resetSolver(const std::vector<std::vector<double>>& x_init, const std::vector<std::vector<double>>& u_init)
+  {
     // reset solver
     if (x_init.size() != NN_ + 1 || u_init.size() != NN_)
       throw std::length_error("x_init or u_init size is not equal to NN_ + 1 or NN_");
@@ -89,25 +92,36 @@ public:
     {
       if (x_init[i].size() != NX_ || u_init[i].size() != NU_)
         throw std::length_error("x_init[i] or u_init[i] size is not equal to NX_ or NU_");
-      ocp_nlp_out_set(nlp_config_, nlp_dims_, nlp_out_, i, "x", (void*)x_init[i].data());
-      ocp_nlp_out_set(nlp_config_, nlp_dims_, nlp_out_, i, "u", (void*)u_init[i].data());
+      ocp_nlp_out_set(nlp_config_, nlp_dims_, nlp_out_, nlp_in_, i, "x", (void*)x_init[i].data());
+      ocp_nlp_out_set(nlp_config_, nlp_dims_, nlp_out_, nlp_in_, i, "u", (void*)u_init[i].data());
     }
     if (x_init[NN_].size() != NX_)
       throw std::length_error("x_init[NN_] size is not equal to NX_");
-    ocp_nlp_out_set(nlp_config_, nlp_dims_, nlp_out_, NN_, "x", (void*)x_init[NN_].data());
+    ocp_nlp_out_set(nlp_config_, nlp_dims_, nlp_out_, nlp_in_, NN_, "x", (void*)x_init[NN_].data());
 
     // update xo_, uo_
     getSolution();
   }
 
-  void resetByX0U0(const std::vector<double>& x0, const std::vector<double>& u0)
+  void resetXrUrByX0U0(const std::vector<double>& x0, const std::vector<double>& u0)
   {
     if (x0.size() != NX_ || u0.size() != NU_)
       throw std::length_error("x0 or u0 size is not equal to NX_ or NU_");
 
-    std::vector<std::vector<double>> x_init(NN_ + 1, x0);
-    std::vector<std::vector<double>> u_init(NN_, u0);
-    reset(x_init, u_init);
+    std::vector xr_init(NN_ + 1, x0);
+    std::vector ur_init(NN_, u0);
+
+    resetXrUr(xr_init, ur_init);
+  }
+
+  void resetSolverByX0U0(const std::vector<double>& x0, const std::vector<double>& u0)
+  {
+    if (x0.size() != NX_ || u0.size() != NU_)
+      throw std::length_error("x0 or u0 size is not equal to NX_ or NU_");
+
+    std::vector x_init(NN_ + 1, x0);
+    std::vector u_init(NN_, u0);
+    resetSolver(x_init, u_init);
   }
 
   int solve(const std::vector<double>& bx0, const bool is_debug = false)
@@ -136,49 +150,21 @@ public:
     ocp_nlp_solver_opts_set(nlp_config_, nlp_opts_, "rti_phase", &rti_phase);
   }
 
-  void setParamSparseOneStage(int stage, std::vector<int>& idx, std::vector<double>& p, bool if_check_len = true)
-  {
-    if (if_check_len)
-    {
-      if (idx.size() != p.size())
-        throw std::length_error("idx size is not equal to p size");
-    }
-
-    acadosUpdateParamsSparse(stage, idx, p, p.size());
-  }
-
-  void setParamSparseAllStages(std::vector<int>& idx, std::vector<double>& p)
-  {
-    if (idx.size() != p.size())
-      throw std::length_error("idx size is not equal to p size");
-
-    for (int i = 0; i < NN_ + 1; i++)
-      setParamSparseOneStage(i, idx, p, false);
-  }
-
   /* after 2025-3-30, the p includes physical params so should be set values during activate().
    * Too early cannot get the correct values. */
-  void setParameters(std::vector<double>& p, bool is_quat_in_p = true)
+  void setParameters(std::vector<double>& p, const int start_idx = 0)
   {
-    if (is_quat_in_p)
+    if (start_idx + p.size() > NP_)
     {
-      if (p.size() != NP_)
-        throw std::length_error("p size is not equal to NP_");
-
-      for (int i = 0; i < NN_ + 1; i++)
-        acadosUpdateParams(i, p);
+      std::stringstream ss;
+      ss << "start_idx + p size" << start_idx + p.size() << " is larger than NP_ = " << NP_;
+      throw std::length_error(ss.str());
     }
-    else
-    {
-      if (p.size() != NP_ - 4)
-        throw std::length_error("p size is not equal to NP_ - 4");
 
-      std::vector<int> index(NP_ - 4);
-      for (int j = 0; j < NP_ - 4; j++)
-        index[j] = j + 4;
+    std::vector<int> index(p.size());
+    std::iota(index.begin(), index.end(), start_idx);
 
-      setParamSparseAllStages(index, p);
-    }
+    setParamSparseAllStages(index, p);
   }
 
   void setReference(const std::vector<std::vector<double>>& xr, const std::vector<std::vector<double>>& ur,
@@ -326,14 +312,14 @@ public:
   std::vector<double> getMatrixA(int stage)
   {
     std::vector<double> mtx_A(NX_ * NX_);
-    ocp_nlp_get_at_stage(nlp_config_, nlp_dims_, nlp_solver_, stage, "A", mtx_A.data());
+    ocp_nlp_get_at_stage(nlp_solver_, stage, "A", mtx_A.data());
     return mtx_A;
   }
 
   std::vector<double> getMatrixB(int stage)
   {
     std::vector<double> mtx_B(NX_ * NU_);
-    ocp_nlp_get_at_stage(nlp_config_, nlp_dims_, nlp_solver_, stage, "B", mtx_B.data());
+    ocp_nlp_get_at_stage(nlp_solver_, stage, "B", mtx_B.data());
     return mtx_B;
   }
 
@@ -344,7 +330,7 @@ public:
     int sqp_iter;
 
     ocp_nlp_out_get(nlp_config_, nlp_dims_, nlp_out_, 0, "kkt_norm_inf", &kkt_norm_inf);
-    ocp_nlp_get(nlp_config_, nlp_solver_, "sqp_iter", &sqp_iter);
+    ocp_nlp_get(nlp_solver_, "sqp_iter", &sqp_iter);
 
     acadosPrintStats();
 
@@ -495,7 +481,7 @@ protected:
     if (status != ACADOS_SUCCESS)
       throw AcadosSolveException(status);
 
-    ocp_nlp_get(nlp_config_, nlp_solver_, "time_tot", &elapsed_time);
+    ocp_nlp_get(nlp_solver_, "time_tot", &elapsed_time);
     min_time = MIN(elapsed_time, min_time);
 
     return min_time;
@@ -532,6 +518,26 @@ protected:
   virtual inline void acadosPrintStats() = 0;
 
 private:
+  void setParamSparseOneStage(int stage, std::vector<int>& idx, std::vector<double>& p, bool if_check_len = true)
+  {
+    if (if_check_len)
+    {
+      if (idx.size() != p.size())
+        throw std::length_error("idx size is not equal to p size");
+    }
+
+    acadosUpdateParamsSparse(stage, idx, p, p.size());
+  }
+
+  void setParamSparseAllStages(std::vector<int>& idx, std::vector<double>& p)
+  {
+    if (idx.size() != p.size())
+      throw std::length_error("idx size is not equal to p size");
+
+    for (int i = 0; i < NN_ + 1; i++)
+      setParamSparseOneStage(i, idx, p, false);
+  }
+
   void setConstraintsValue(const std::string& constraint_type, int stage, std::vector<double> value,
                            bool is_check_len = true) const
   {
@@ -566,7 +572,8 @@ private:
       }
     }
 
-    ocp_nlp_constraints_model_set(nlp_config_, nlp_dims_, nlp_in_, stage, constraint_type.c_str(), value.data());
+    ocp_nlp_constraints_model_set(nlp_config_, nlp_dims_, nlp_in_, nlp_out_, stage, constraint_type.c_str(),
+                                  value.data());
   }
 
   std::vector<int> getConstraintsIdx(const std::string& constraint_type, int stage) const

@@ -4,6 +4,7 @@ import time
 import numpy as np
 import argparse
 
+<<<<<<< HEAD
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_bi")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_tri")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_qd")
@@ -16,42 +17,51 @@ from nmpc_viz import Visualizer
 import tilt_qd.phys_param_beetle_omni as phys_omni
 import archive.phys_param_beetle_art as phys_art
 import hydrus.phys_param_hydrus as phys_hydrus
+=======
+from nmpc_tilt_mt.utils.nmpc_viz import Visualizer
+
+# Quadrotor
+import nmpc_tilt_mt.tilt_qd.phys_param_beetle_omni as phys_omni
+import nmpc_tilt_mt.archive.phys_param_beetle_art as phys_art
+>>>>>>> upstream/develop/MPC_tilt_mt
 
 # - Naive models
-from archive.tilt_qd_no_servo_ac_cost import NMPCTiltQdNoServoAcCost
-from tilt_qd.tilt_qd_no_servo import NMPCTiltQdNoServo
+from nmpc_tilt_mt.archive.tilt_qd_no_servo_ac_cost import NMPCTiltQdNoServoAcCost
+from nmpc_tilt_mt.tilt_qd.tilt_qd_no_servo import NMPCTiltQdNoServo
 
 # - Consider the servo delay with its model
-from tilt_qd.tilt_qd_servo import NMPCTiltQdServo
-from tilt_qd.tilt_qd_servo_dist import NMPCTiltQdServoDist
-from archive.tilt_qd_servo_drag_w_dist import NMPCTiltQdServoDragDist
-from archive.tilt_qd_servo_w_cog_end_dist import NMPCTiltQdServoWCogEndDist
+from nmpc_tilt_mt.tilt_qd.tilt_qd_servo import NMPCTiltQdServo
+from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_dist import NMPCTiltQdServoDist
+from nmpc_tilt_mt.archive.tilt_qd_servo_drag_w_dist import NMPCTiltQdServoDragDist
+from nmpc_tilt_mt.archive.tilt_qd_servo_w_cog_end_dist import NMPCTiltQdServoWCogEndDist
 
-from archive.tilt_qd_servo_old_cost import NMPCTiltQdServoOldCost
-from tilt_qd.tilt_qd_servo_diff import NMPCTiltQdServoDiff
+# - Conside servo angle derivative as state
+from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_diff import NMPCTiltQdServoDiff
+
+# - Consider the absolute servo angle command in cost
+from nmpc_tilt_mt.archive.tilt_qd_servo_old_cost import NMPCTiltQdServoOldCost
 
 # - Consider the thrust delay with its model
-from tilt_qd.tilt_qd_thrust import NMPCTiltQdThrust
+from nmpc_tilt_mt.tilt_qd.tilt_qd_thrust import NMPCTiltQdThrust
 
 # - Consider the servo & thrust delay with its models
-from tilt_qd.tilt_qd_servo_thrust import NMPCTiltQdServoThrust
-from tilt_qd.tilt_qd_servo_thrust_dist import NMPCTiltQdServoThrustDist
-from archive.tilt_qd_servo_thrust_drag import NMPCTiltQdServoThrustDrag
+from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_thrust import NMPCTiltQdServoThrust
+from nmpc_tilt_mt.tilt_qd.tilt_qd_servo_thrust_dist import NMPCTiltQdServoThrustDist
+from nmpc_tilt_mt.archive.tilt_qd_servo_thrust_drag import NMPCTiltQdServoThrustDrag
 
 # Birotor
-from tilt_bi.tilt_bi_servo import NMPCTiltBiServo
-from tilt_bi.tilt_bi_2ord_servo import NMPCTiltBi2OrdServo
+from nmpc_tilt_mt.tilt_bi.tilt_bi_servo import NMPCTiltBiServo
+from nmpc_tilt_mt.tilt_bi.tilt_bi_2ord_servo import NMPCTiltBi2OrdServo
 
 # Trirotor
-from tilt_tri.tilt_tri_servo import NMPCTiltTriServo
-from tilt_tri.tilt_tri_servo_dist import NMPCTiltTriServoDist
+from nmpc_tilt_mt.tilt_tri.tilt_tri_servo import NMPCTiltTriServo
+from nmpc_tilt_mt.tilt_tri.tilt_tri_servo_dist import NMPCTiltTriServoDist
 
 
 def main(args):
     # ========== Init ==========
     # ---------- Controller ----------
-    if args.arch == 'qd':
-
+    if args.arch == "qd":
         if args.model == 0:
             nmpc = NMPCTiltQdNoServo(phys=phys_art)
         elif args.model == 1:
@@ -85,8 +95,7 @@ def main(args):
         else:
             raise ValueError(f"Invalid control model {args.model}.")
 
-    elif args.arch == 'bi':
-
+    elif args.arch == "bi":
         if args.model == 0:
             nmpc = NMPCTiltBiServo()
         elif args.model == 1:
@@ -94,8 +103,7 @@ def main(args):
         else:
             raise ValueError(f"Invalid model {args.model}.")
 
-    elif args.arch == 'tri':
-
+    elif args.arch == "tri":
         if args.model == 0:
             nmpc = NMPCTiltTriServo()
         elif args.model == 1:
@@ -129,8 +137,7 @@ def main(args):
     u_history = []
 
     # ---------- Simulator ----------
-    if args.arch == 'qd':
-
+    if args.arch == "qd":
         sim_phy = phys_omni if 20 < args.model < 30 else phys_art
         if args.sim_model == 0:
             sim_nmpc = NMPCTiltQdServoThrust(phys=sim_phy)  # Consider both the servo delay and the thrust delay
@@ -139,8 +146,7 @@ def main(args):
         else:
             raise ValueError(f"Invalid sim model {args.sim_model}.")
 
-    elif args.arch == 'bi':
-
+    elif args.arch == "bi":
         if args.sim_model == 0:
             sim_nmpc = NMPCTiltBiServo()
         # elif args.sim_model == 1:
@@ -148,8 +154,7 @@ def main(args):
         else:
             raise ValueError(f"Invalid sim model {args.sim_model}.")
 
-    elif args.arch == 'tri':
-
+    elif args.arch == "tri":
         sim_nmpc = NMPCTiltTriServo()
 
     else:
@@ -176,7 +181,7 @@ def main(args):
     N_sim = int(t_total_sim / ts_sim)
 
     # Sim solver
-    sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, is_build=True)
+    sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, build=True)
     nx_sim = sim_solver.acados_sim.dims.nx
 
     # State Initialization
@@ -196,7 +201,7 @@ def main(args):
         tilt=nmpc.tilt,
         include_servo_model=sim_nmpc.include_servo_model,
         include_thrust_model=sim_nmpc.include_thrust_model,
-        include_cog_dist_model=sim_nmpc.include_cog_dist_model
+        include_cog_dist_model=sim_nmpc.include_cog_dist_model,
     )
 
     # Prepare containers to record simulation data (x and u) for future comparison
@@ -218,7 +223,7 @@ def main(args):
         print(nmpc.acados_init_p)
 
         # --------- Update state estimation ---------
-        # Assemble state from simulation and disturbance estimation 
+        # Assemble state from simulation and disturbance estimation
         if nmpc.include_cog_dist_model:
             x_now = np.zeros(nx)
             x_now[: nx - 6] = deepcopy(x_now_sim[: nx - 6])
@@ -227,12 +232,13 @@ def main(args):
 
         # Access from less indices
         if (nmpc.include_thrust_model and not nmpc.include_servo_model) and (
-                sim_nmpc.include_servo_model and sim_nmpc.include_thrust_model):
-            if args.arch == 'bi':
+            sim_nmpc.include_servo_model and sim_nmpc.include_thrust_model
+        ):
+            if args.arch == "bi":
                 x_now[13:15] = deepcopy(x_now_sim[15:17])
-            elif args.arch == 'tri':
+            elif args.arch == "tri":
                 x_now[13:16] = deepcopy(x_now_sim[16:19])
-            elif args.arch == 'qd':
+            elif args.arch == "qd":
                 x_now[13:17] = deepcopy(x_now_sim[17:21])
 
         # -------- Update control target --------
@@ -275,11 +281,11 @@ def main(args):
         if args.plot_type == 2:
             if nx > 13:
                 xr[:, 13:] = 0.0
-            if args.arch == 'bi':
+            if args.arch == "bi":
                 ur[:, 2:] = 0.0
-            elif args.arch == 'tri':
+            elif args.arch == "tri":
                 ur[:, 3:] = 0.0
-            elif args.arch == 'qd':
+            elif args.arch == "qd":
                 ur[:, 4:] = 0.0
 
         # -------- Set SQP mode --------
@@ -321,7 +327,7 @@ def main(args):
         comp_time_end = time.time()
         viz.comp_time[i] = comp_time_end - comp_time_start
 
-        if args.arch == 'qd':
+        if args.arch == "qd":
             # Use previous servo angle as reference
             if type(nmpc) is NMPCTiltQdNoServoAcCost:
                 nmpc.update_a_prev(u_cmd.item(4), u_cmd.item(5), u_cmd.item(6), u_cmd.item(7))
@@ -358,27 +364,20 @@ def main(args):
                 ts_sim,
                 t_total_sim,
                 t_servo_ctrl=t_servo_ctrl,
-                t_servo_sim=t_servo_sim
+                t_servo_sim=t_servo_sim,
             )
         elif args.plot_type == 1:
-            viz.visualize_less(
-                ts_sim,
-                t_total_sim
-            )
+            viz.visualize_less(ts_sim, t_total_sim)
         elif args.plot_type == 2:
-            viz.visualize_rpy(
-                ocp_solver.acados_ocp.model.name,
-                ts_sim,
-                t_total_sim
-            )
+            viz.visualize_rpy(ocp_solver.acados_ocp.model.name, ts_sim, t_total_sim)
 
     if args.save_data:
         file_path = args.file_path
 
         np.savez(
-            file_path + f"nmpc_{type(nmpc).__name__}_model_{type(sim_nmpc).__name__}.npz",
+            file_path + f"nmpc_{type(nmpc).__name__}_sim_{type(sim_nmpc).__name__}.npz",
             x=np.array(x_history),
-            u=np.array(u_history)
+            u=np.array(u_history),
         )
 
     return np.array(x_history), np.array(u_history)
@@ -391,12 +390,12 @@ if __name__ == "__main__":
         "model",
         type=int,
         help="The NMPC model to be simulated. "
-             "Options: 0 (basic model), 1 (servo), "
-             "2 (thrust), 3(servo+thrust), "
-             "21 (servo+dist), 22 (servo+thrust+dist), "
-             "91(no_servo_new_cost), 92(servo_old_cost), "
-             "93(servo_diff), 94(servo+drag+dist), "
-             "95 (servo+thrust+drag), 96 (servo+drag_param+dist).",
+        "Options: 0 (basic model), 1 (servo), "
+        "2 (thrust), 3(servo+thrust), "
+        "21 (servo+dist), 22 (servo+thrust+dist), "
+        "91(no_servo_new_cost), 92(servo_old_cost), "
+        "93(servo_diff), 94(servo+drag+dist), "
+        "95 (servo+thrust+drag), 96 (servo+drag_param+dist).",
     )
 
     parser.add_argument(
@@ -404,9 +403,7 @@ if __name__ == "__main__":
         "--sim_model",
         type=int,
         default=0,
-        help="The simulation model. "
-             "Options: 0 (default: servo+thrust), "
-             "1 (servo+thrust+drag).",
+        help="The simulation model. " "Options: 0 (default: servo+thrust), " "1 (servo+thrust+drag).",
     )
 
     parser.add_argument(
@@ -414,38 +411,23 @@ if __name__ == "__main__":
         "--plot_type",
         type=int,
         default=0,
-        help="The type of plot. "
-             "Options: 0 (default: full), 1 (less), 2 (only rpy)."
+        help="The type of plot. " "Options: 0 (default: full), 1 (less), 2 (only rpy).",
     )
 
     parser.add_argument(
-        "-a",
-        "--arch",
-        type=str,
-        default='qd',
-        help="The robot's architecture. Options: bi, tri, qd (default)."
+        "-a", "--arch", type=str, default="qd", help="The robot's architecture. Options: bi, tri, qd (default)."
     )
 
     parser.add_argument(
         "--no_viz",
         action="store_true",
         help="Disable visualization after simulation. Note that this is different from the plot_type option, "
-             "because plot_type also decides the simulation parameters."
+        "because plot_type also decides the simulation parameters.",
     )
 
-    parser.add_argument(
-        "-s",
-        "--save_data",
-        action="store_true",
-        help="Save simulation x and u data to file"
-    )
+    parser.add_argument("-s", "--save_data", action="store_true", help="Save simulation x and u data to file")
 
-    parser.add_argument(
-        "--file_path",
-        type=str,
-        default=f"../../../../test/data/",
-        help="Path to save the data file"
-    )
+    parser.add_argument("--file_path", type=str, default=f"../../../../test/data/", help="Path to save the data file")
 
     args = parser.parse_args()
     main(args)
