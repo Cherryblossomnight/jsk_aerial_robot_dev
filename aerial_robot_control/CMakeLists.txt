@@ -62,31 +62,11 @@ add_library(control_utils
 target_link_libraries(control_utils ${EIGEN3_LIBRARIES})
 
 ### acados code generation
-<<<<<<< HEAD
-# Create a list to hold the target names
-set(ACADOS_PYTHON_TARGETS)
-
-# Create a list of the scripts
-set(ACADOS_PYTHON_SCRIPTS
- #${PROJECT_SOURCE_DIR}/scripts/nmpc/hydrus/hydrus.py
-#       ${PROJECT_SOURCE_DIR}/scripts/nmpc/fix_qd/fix_qd_angvel_out.py
-#       ${PROJECT_SOURCE_DIR}/scripts/nmpc/fix_qd/fix_qd_thrust_out.py
-#       ${PROJECT_SOURCE_DIR}/scripts/nmpc/tilt_qd/tilt_qd_no_servo.py
-#       ${PROJECT_SOURCE_DIR}/scripts/nmpc/tilt_qd/tilt_qd_servo.py
-#       ${PROJECT_SOURCE_DIR}/scripts/nmpc/tilt_qd/tilt_qd_servo_dist.py
-#       ${PROJECT_SOURCE_DIR}/scripts/nmpc/tilt_qd/tilt_qd_servo_dist_imp.py
-#       ${PROJECT_SOURCE_DIR}/scripts/nmpc/tilt_qd/tilt_qd_servo_thrust_dist.py
-#       ${PROJECT_SOURCE_DIR}/scripts/nmpc/tilt_qd/tilt_qd_servo_thrust_dist_imp.py
-#       ${PROJECT_SOURCE_DIR}/scripts/nmpc/tilt_tri/tilt_tri_servo.py
-#       ${PROJECT_SOURCE_DIR}/scripts/nmpc/tilt_bi/tilt_bi_servo.py
-#       ${PROJECT_SOURCE_DIR}/scripts/nmpc/tilt_bi/tilt_bi_2ord_servo.py
-#       ${PROJECT_SOURCE_DIR}/scripts/nmpc/tilt_qd/mhe_wrench_est_acc_mom.py
-=======
 add_custom_target(gen_acados_code ALL
   COMMAND bash ${PROJECT_SOURCE_DIR}/scripts/nmpc/gen_nmpc_code_all.sh
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/scripts/nmpc/
   COMMENT "Generating acados code for NMPC models"
->>>>>>> upstream/develop/MPC_tilt_mt
+
 )
 
 ### wrench estimation plugin

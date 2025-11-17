@@ -6,7 +6,7 @@
 
 using namespace aerial_robot_control;
 
-void nmpc::TiltMtServoNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
+void nmpc::HydrusXiNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
                                        boost::shared_ptr<aerial_robot_model::RobotModel> robot_model,
                                        boost::shared_ptr<aerial_robot_estimation::StateEstimator> estimator,
                                        boost::shared_ptr<aerial_robot_navigation::BaseNavigator> navigator,
@@ -18,7 +18,7 @@ void nmpc::TiltMtServoNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
   ros::NodeHandle control_nh(nh_, "controller");
   ros::NodeHandle nmpc_nh(control_nh, "nmpc");
   nmpc_reconf_servers_.push_back(boost::make_shared<NMPCControlDynamicConfig>(nmpc_nh));
-  nmpc_reconf_servers_.back()->setCallback(boost::bind(&TiltMtServoNMPC::cfgNMPCCallback, this, _1, _2));
+  nmpc_reconf_servers_.back()->setCallback(boost::bind(&HydrusXiNMPCC::cfgNMPCCallback, this, _1, _2));
 
   /* set some ROS parameters */
   nmpc_nh.setParam("NN", mpc_solver_ptr_->NN_);
@@ -26,7 +26,7 @@ void nmpc::TiltMtServoNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
   nmpc_nh.setParam("NU", mpc_solver_ptr_->NU_);
 
   /* timers */
-  tmr_viz_ = nh_.createTimer(ros::Duration(0.05), &TiltMtServoNMPC::callbackViz, this);
+  tmr_viz_ = nh_.createTimer(ros::Duration(0.05), &HydrusXiNMPC::callbackViz, this);
 
   /* publishers */
   pub_viz_pred_ = nh_.advertise<geometry_msgs::PoseArray>("nmpc/viz_pred", 1);
@@ -39,11 +39,11 @@ void nmpc::TiltMtServoNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
   srv_set_control_mode_ = nh_.serviceClient<spinal::SetControlMode>("set_control_mode");
 
   /* subscribers */
-  sub_joint_states_ = nh_.subscribe("joint_states", 5, &TiltMtServoNMPC::callbackJointStates, this);
-  sub_set_rpy_ = nh_.subscribe("set_rpy", 5, &TiltMtServoNMPC::callbackSetRPY, this);
-  sub_set_ref_x_u_ = nh_.subscribe("set_ref_x_u", 5, &TiltMtServoNMPC::callbackSetRefXU, this);
-  sub_set_traj_ = nh_.subscribe("set_ref_traj", 5, &TiltMtServoNMPC::callbackSetRefTraj, this);
-  sub_set_fixed_rotor_ = nh_.subscribe("set_fixed_rotor", 5, &TiltMtServoNMPC::callbackSetFixedRotor, this);
+  sub_joint_states_ = nh_.subscribe("joint_states", 5, &HydrusXiNMPC::callbackJointStates, this);
+  sub_set_rpy_ = nh_.subscribe("set_rpy", 5, &HydrusXiNMPC::callbackSetRPY, this);
+  sub_set_ref_x_u_ = nh_.subscribe("set_ref_x_u", 5, &HydrusXiNMPC::callbackSetRefXU, this);
+  sub_set_traj_ = nh_.subscribe("set_ref_traj", 5, &HydrusXiNMPC::callbackSetRefTraj, this);
+  sub_set_fixed_rotor_ = nh_.subscribe("set_fixed_rotor", 5, &HydrusXiNMPC::callbackSetFixedRotor, this);
 
   /* init some values */
   setControlMode();
@@ -57,7 +57,7 @@ void nmpc::TiltMtServoNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
   ROS_INFO("MPC Controller initialized!");
 }
 
-void nmpc::TiltMtServoNMPC::activate()
+void nmpc::HydrusXiNMPC::activate()
 {
   initAllocMat();
   updateInertialParams();
@@ -78,7 +78,7 @@ void nmpc::TiltMtServoNMPC::activate()
   BaseMPC::activate();
 }
 
-bool nmpc::TiltMtServoNMPC::update()
+bool nmpc::HydrusXiNMPC::update()
 {
   if (!BaseMPC::update())
     return false;
@@ -89,7 +89,7 @@ bool nmpc::TiltMtServoNMPC::update()
   return true;
 }
 
-void nmpc::TiltMtServoNMPC::reset()
+void nmpc::HydrusXiNMPC::reset()
 {
   BaseMPC::reset();
 
@@ -125,7 +125,7 @@ void nmpc::TiltMtServoNMPC::reset()
   pub_gimbal_control_.publish(gimbal_ctrl_cmd_);
 }
 
-void nmpc::TiltMtServoNMPC::initGeneralParams()
+void nmpc::HydrusXiNMPC::initGeneralParams()
 {
   ros::NodeHandle control_nh(nh_, "controller");
   ros::NodeHandle nmpc_nh(control_nh, "nmpc");
@@ -161,7 +161,7 @@ void nmpc::TiltMtServoNMPC::initGeneralParams()
     ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug);
 }
 
-void nmpc::TiltMtServoNMPC::initNMPCCostW()
+void nmpc::HydrusXiNMPC::initNMPCCostW()
 {
   ros::NodeHandle control_nh(nh_, "controller");
   ros::NodeHandle nmpc_nh(control_nh, "nmpc");
@@ -202,7 +202,7 @@ void nmpc::TiltMtServoNMPC::initNMPCCostW()
     mpc_solver_ptr_->setCostWDiagElement(i, Rac_d, false);
 }
 
-void nmpc::TiltMtServoNMPC::initNMPCConstraints()
+void nmpc::HydrusXiNMPC::initNMPCConstraints()
 {
   ros::NodeHandle control_nh(nh_, "controller");
   ros::NodeHandle nmpc_nh(control_nh, "nmpc");
@@ -287,7 +287,7 @@ void nmpc::TiltMtServoNMPC::initNMPCConstraints()
   mpc_solver_ptr_->setConstraintsUbu(ubu);
 }
 
-void nmpc::TiltMtServoNMPC::setControlMode()
+void nmpc::HydrusXiNMPC::setControlMode()
 {
   bool res = ros::service::waitForService("set_control_mode", ros::Duration(5));
   if (!res)
@@ -306,7 +306,7 @@ void nmpc::TiltMtServoNMPC::setControlMode()
            set_control_mode_srv.request.is_body_rate);
 }
 
-void nmpc::TiltMtServoNMPC::initAllocMat()
+void nmpc::HydrusXiNMPC::initAllocMat()
 {
   /* get physical param */
   int rotor_num = robot_model_->getRotorNum();  // For tilt-rotor, rotor_num = servo_num
@@ -349,7 +349,7 @@ void nmpc::TiltMtServoNMPC::initAllocMat()
 /* Note: The difference between this function and prepareNMPCParams() is:
  * this function set idx for different physical parameters.
  */
-void nmpc::TiltMtServoNMPC::initNMPCParams()
+void nmpc::HydrusXiNMPC::initNMPCParams()
 {
   /* construct acados parameters */
   std::vector<double> acados_p(mpc_solver_ptr_->NP_, 0.0);
@@ -376,7 +376,7 @@ void nmpc::TiltMtServoNMPC::initNMPCParams()
   mpc_solver_ptr_->setParameters(acados_p);
 }
 
-void nmpc::TiltMtServoNMPC::updateInertialParams()
+void nmpc::HydrusXiNMPC::updateInertialParams()
 {
   mass_ = robot_model_->getMass();
   gravity_const_ = robot_model_->getGravity()[2];
@@ -387,7 +387,7 @@ void nmpc::TiltMtServoNMPC::updateInertialParams()
   inertia_[2] = inertia_mtx(2, 2);
 }
 
-void nmpc::TiltMtServoNMPC::modifyVelConstraints(double vel_min, double vel_max) const
+void nmpc::HydrusXiNMPC::modifyVelConstraints(double vel_min, double vel_max) const
 {
   // Hardcoded: the vel idx is 3,4,5, which are the first three elements. TODO: consider to make it more general
 
@@ -419,7 +419,7 @@ void nmpc::TiltMtServoNMPC::modifyVelConstraints(double vel_min, double vel_max)
            ubx[0], ubx[1], ubx[2]);
 }
 
-std::vector<double> nmpc::TiltMtServoNMPC::PhysToNMPCParams() const
+std::vector<double> nmpc::HydrusXiNMPC::PhysToNMPCParams() const
 {
   int rotor_num = robot_model_->getRotorNum();  // For tilt-rotor, rotor_num = servo_num
   const auto& rotor_p = robot_model_->getRotorsOriginFromCog<Eigen::Vector3d>();
@@ -477,7 +477,7 @@ std::vector<double> nmpc::TiltMtServoNMPC::PhysToNMPCParams() const
   return phys_p;
 }
 
-void nmpc::TiltMtServoNMPC::controlCore()
+void nmpc::HydrusXiNMPC::controlCore()
 {
   // restore velocity constraints after hovering
   if (navigator_->getNaviState() == aerial_robot_navigation::HOVER_STATE and has_restored_vel_ == false)
@@ -522,7 +522,7 @@ void nmpc::TiltMtServoNMPC::controlCore()
   }
 }
 
-void nmpc::TiltMtServoNMPC::sendCmd()
+void nmpc::HydrusXiNMPC::sendCmd()
 {
   /* publish */
   if (motor_num_ > 0)
@@ -531,7 +531,7 @@ void nmpc::TiltMtServoNMPC::sendCmd()
     pub_gimbal_control_.publish(gimbal_ctrl_cmd_);
 }
 
-void nmpc::TiltMtServoNMPC::prepareNMPCRef()
+void nmpc::HydrusXiNMPC::prepareNMPCRef()
 {
   // TODO: wrap to a state machine
   if (!is_traj_tracking_)
@@ -582,7 +582,7 @@ void nmpc::TiltMtServoNMPC::prepareNMPCRef()
   setPointRefFromNavigator(false);
 }
 
-void nmpc::TiltMtServoNMPC::prepareNMPCParams()
+void nmpc::HydrusXiNMPC::prepareNMPCParams()
 {
   updateInertialParams();
 
@@ -594,7 +594,7 @@ void nmpc::TiltMtServoNMPC::prepareNMPCParams()
   }
 }
 
-void nmpc::TiltMtServoNMPC::setPointRefFromNavigator(bool is_shifted_not_set_all)
+void nmpc::HydrusXiNMPC::setPointRefFromNavigator(bool is_shifted_not_set_all)
 {
   tf::Vector3 target_cog_pos_in_w = navigator_->getTargetPos();
   tf::Vector3 target_cog_vel_in_w = navigator_->getTargetVel();
@@ -625,7 +625,7 @@ void nmpc::TiltMtServoNMPC::setPointRefFromNavigator(bool is_shifted_not_set_all
  * @param horizon_idx - set -1 for adding the target point to the end of the reference trajectory; 0 ~ NN for adding
  * the target point to the horizon_idx interval; -2 for adding the target point to all points
  */
-void nmpc::TiltMtServoNMPC::setXrUrRef(const tf::Vector3& ref_pos_i, const tf::Vector3& ref_vel_i,
+void nmpc::HydrusXiNMPC::setXrUrRef(const tf::Vector3& ref_pos_i, const tf::Vector3& ref_vel_i,
                                        const tf::Vector3& ref_acc_i, const tf::Quaternion& ref_quat_ib,
                                        const tf::Vector3& ref_omega_b, const tf::Vector3& ref_ang_acc_b,
                                        const int& horizon_idx)
@@ -706,7 +706,7 @@ void nmpc::TiltMtServoNMPC::setXrUrRef(const tf::Vector3& ref_pos_i, const tf::V
     std::copy(u.begin(), u.begin() + NU, x_u_ref_.u.data.begin() + NU * horizon_idx);
 }
 
-void nmpc::TiltMtServoNMPC::allocateToXU(const tf::Vector3& ref_pos_i, const tf::Vector3& ref_vel_i,
+void nmpc::HydrusXiNMPC::allocateToXU(const tf::Vector3& ref_pos_i, const tf::Vector3& ref_vel_i,
                                          const tf::Quaternion& ref_quat_ib, const tf::Vector3& ref_omega_b,
                                          const VectorXd& ref_wrench_b, vector<double>& x, vector<double>& u)
 {
@@ -810,7 +810,7 @@ void nmpc::TiltMtServoNMPC::allocateToXU(const tf::Vector3& ref_pos_i, const tf:
   allocateToXUwOneFixedRotor(rotor_idx, ft_stop_rotor, alpha_stop_rotor, ref_wrench_b, x, u);
 }
 
-void nmpc::TiltMtServoNMPC::allocateToXUwOneFixedRotor(int fix_rotor_idx, double fix_ft, double fix_alpha,
+void nmpc::HydrusXiNMPC::allocateToXUwOneFixedRotor(int fix_rotor_idx, double fix_ft, double fix_alpha,
                                                        const VectorXd& ref_wrench_b, vector<double>& x,
                                                        vector<double>& u)
 {
@@ -874,7 +874,7 @@ void nmpc::TiltMtServoNMPC::allocateToXUwOneFixedRotor(int fix_rotor_idx, double
  * @brief callbackViz: publish the predicted trajectory and reference trajectory
  * @param [ros::TimerEvent&] event
  */
-void nmpc::TiltMtServoNMPC::callbackViz(const ros::TimerEvent& event)
+void nmpc::HydrusXiNMPC::callbackViz(const ros::TimerEvent& event)
 {
   // from mpc_solver_ptr_->x_u_out to PoseArray
   geometry_msgs::PoseArray pred_poses;
@@ -915,14 +915,14 @@ void nmpc::TiltMtServoNMPC::callbackViz(const ros::TimerEvent& event)
   pub_viz_ref_.publish(ref_poses);
 }
 
-void nmpc::TiltMtServoNMPC::callbackJointStates(const sensor_msgs::JointStateConstPtr& msg)
+void nmpc::HydrusXiNMPC::callbackJointStates(const sensor_msgs::JointStateConstPtr& msg)
 {
   for (int i = 0; i < joint_num_; i++)
     joint_angles_[i] = msg->position[i];
 }
 
 /* TODO: this function is just for test. We may need a more general function to set all kinds of state */
-void nmpc::TiltMtServoNMPC::callbackSetRPY(const spinal::DesireCoordConstPtr& msg)
+void nmpc::HydrusXiNMPC::callbackSetRPY(const spinal::DesireCoordConstPtr& msg)
 {
   // add a check to avoid the singular point for euler angle
   if (msg->pitch == M_PI / 2.0 or msg->pitch == -M_PI / 2.0)
@@ -939,7 +939,7 @@ void nmpc::TiltMtServoNMPC::callbackSetRPY(const spinal::DesireCoordConstPtr& ms
 }
 
 /* TODO: this function should be combined with the inner planning framework */
-void nmpc::TiltMtServoNMPC::callbackSetRefXU(const aerial_robot_msgs::PredXUConstPtr& msg)
+void nmpc::HydrusXiNMPC::callbackSetRefXU(const aerial_robot_msgs::PredXUConstPtr& msg)
 {
   /* failsafe check */
   if (navigator_->getNaviState() != aerial_robot_navigation::HOVER_STATE)
@@ -964,7 +964,7 @@ void nmpc::TiltMtServoNMPC::callbackSetRefXU(const aerial_robot_msgs::PredXUCons
   mpc_solver_ptr_->setReference(mpc_solver_ptr_->xr_, mpc_solver_ptr_->ur_, true);
 }
 
-void nmpc::TiltMtServoNMPC::callbackSetRefTraj(const trajectory_msgs::MultiDOFJointTrajectoryConstPtr& msg)
+void nmpc::HydrusXiNMPC::callbackSetRefTraj(const trajectory_msgs::MultiDOFJointTrajectoryConstPtr& msg)
 {
   if (msg->points.size() != mpc_solver_ptr_->NN_ + 1)
     ROS_WARN("The length of the trajectory is not equal to the prediction horizon! Cannot use the trajectory!");
@@ -1013,7 +1013,7 @@ void nmpc::TiltMtServoNMPC::callbackSetRefTraj(const trajectory_msgs::MultiDOFJo
   last_traj_msg_ = *msg;
 }
 
-void nmpc::TiltMtServoNMPC::callbackSetFixedRotor(const aerial_robot_msgs::FixRotorConstPtr& msg)
+void nmpc::HydrusXiNMPC::callbackSetFixedRotor(const aerial_robot_msgs::FixRotorConstPtr& msg)
 {
   // failsafe
   if (msg->rotor_id < 0 || msg->rotor_id >= motor_num_)
@@ -1042,7 +1042,7 @@ void nmpc::TiltMtServoNMPC::callbackSetFixedRotor(const aerial_robot_msgs::FixRo
   fix_rotor_msg_ = *msg;
 }
 
-void nmpc::TiltMtServoNMPC::cfgNMPCCallback(NMPCConfig& config, uint32_t level)
+void nmpc::HydrusXiNMPC::cfgNMPCCallback(NMPCConfig& config, uint32_t level)
 {
   using Levels = aerial_robot_msgs::DynamicReconfigureLevels;
   if (config.nmpc_flag)
@@ -1127,7 +1127,7 @@ void nmpc::TiltMtServoNMPC::cfgNMPCCallback(NMPCConfig& config, uint32_t level)
   }
 }
 
-double nmpc::TiltMtServoNMPC::getCommand(int idx_u, double T_horizon) const
+double nmpc::HydrusXiNMPC::getCommand(int idx_u, double T_horizon) const
 {
   if (T_horizon == 0)
     return mpc_solver_ptr_->uo_.at(0).at(idx_u);
@@ -1136,7 +1136,7 @@ double nmpc::TiltMtServoNMPC::getCommand(int idx_u, double T_horizon) const
          T_horizon / t_nmpc_step_ * (mpc_solver_ptr_->uo_.at(1).at(idx_u) - mpc_solver_ptr_->uo_.at(0).at(idx_u));
 }
 
-std::vector<double> nmpc::TiltMtServoNMPC::meas2VecX(bool is_modified_by_traj_frame)
+std::vector<double> nmpc::HydrusXiNMPC::meas2VecX(bool is_modified_by_traj_frame)
 {
   vector<double> bx0(mpc_solver_ptr_->NBX0_, 0);
 
@@ -1197,7 +1197,7 @@ std::vector<double> nmpc::TiltMtServoNMPC::meas2VecX(bool is_modified_by_traj_fr
   return bx0;
 }
 
-double nmpc::TiltMtServoNMPC::ensureOneServoContinuity(double a_ref, int idx) const
+double nmpc::HydrusXiNMPC::ensureOneServoContinuity(double a_ref, int idx) const
 {
   double a_now = gimbal_ctrl_cmd_.position[idx];
   // ensure the servo angle is continuous
@@ -1209,7 +1209,7 @@ double nmpc::TiltMtServoNMPC::ensureOneServoContinuity(double a_ref, int idx) co
   return a_ref;
 }
 
-std::vector<double> nmpc::TiltMtServoNMPC::ensureAllServoContinuity(std::vector<double>& a_ref_vec) const
+std::vector<double> nmpc::HydrusXiNMPC::ensureAllServoContinuity(std::vector<double>& a_ref_vec) const
 {
   for (int i = 0; i < joint_num_; i++)
     a_ref_vec[i] = ensureOneServoContinuity(a_ref_vec[i], i);
@@ -1217,7 +1217,7 @@ std::vector<double> nmpc::TiltMtServoNMPC::ensureAllServoContinuity(std::vector<
   return a_ref_vec;
 }
 
-void nmpc::TiltMtServoNMPC::printPhysicalParams()
+void nmpc::HydrusXiNMPC::printPhysicalParams()
 {
   cout << "mass: " << robot_model_->getMass() << endl;
   cout << "gravity: " << robot_model_->getGravity() << endl;
@@ -1238,7 +1238,7 @@ void nmpc::TiltMtServoNMPC::printPhysicalParams()
   cout << "abs(kq_kt_rate)" << abs(robot_model_->getMFRate()) << endl;
 }
 
-bool nmpc::TiltMtServoNMPC::isMulDOFJointTrajPtEqual(const trajectory_msgs::MultiDOFJointTrajectoryPoint& a,
+bool nmpc::HydrusXiNMPC::isMulDOFJointTrajPtEqual(const trajectory_msgs::MultiDOFJointTrajectoryPoint& a,
                                                      const trajectory_msgs::MultiDOFJointTrajectoryPoint& b,
                                                      bool if_compare_time, double epsilon)
 {
@@ -1292,4 +1292,4 @@ bool nmpc::TiltMtServoNMPC::isMulDOFJointTrajPtEqual(const trajectory_msgs::Mult
 /* plugin registration */
 #include <pluginlib/class_list_macros.h>
 
-PLUGINLIB_EXPORT_CLASS(aerial_robot_control::nmpc::TiltMtServoNMPC, aerial_robot_control::ControlBase)
+PLUGINLIB_EXPORT_CLASS(aerial_robot_control::nmpc::HydrusXiNMPC, aerial_robot_control::ControlBase)

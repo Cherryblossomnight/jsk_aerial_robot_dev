@@ -1,9 +1,9 @@
 //
-// Created by lijinjie on 23/11/29.
+// Created by Cherryblossomnight on 25/11/17.
 //
 
-#ifndef TILT_MT_SERVO_NMPC_CONTROLLER_H
-#define TILT_MT_SERVO_NMPC_CONTROLLER_H
+#ifndef HYDRUS_XI_CONTROLLER_H
+#define HYDRUS_XI_CONTROLLER_H
 
 #include "aerial_robot_control/nmpc/base_mpc_controller.h"
 
@@ -43,11 +43,11 @@ namespace aerial_robot_control
 namespace nmpc
 {
 
-class TiltMtServoNMPC : public BaseMPC
+class HydrusXiNMPC : public BaseMPC
 {
 public:
-  TiltMtServoNMPC() = default;  // note that constructor should not have arguments as the rule of rospluginlib
-  ~TiltMtServoNMPC() override = default;
+  HydrusXiNMPC() = default;  // note that constructor should not have arguments as the rule of rospluginlib
+  ~HydrusXiNMPC() override = default;
   void initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
                   boost::shared_ptr<aerial_robot_model::RobotModel> robot_model,
                   boost::shared_ptr<aerial_robot_estimation::StateEstimator> estimator,
@@ -208,4 +208,4 @@ private:
 
 }  // namespace aerial_robot_control
 
-#endif  // TILT_MT_SERVO_NMPC_CONTROLLER_H
+#endif  // HYDRUS_XI_CONTROLLER_H
