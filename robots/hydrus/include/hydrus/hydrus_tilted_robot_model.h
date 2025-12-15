@@ -48,5 +48,7 @@ public:
   virtual void calcStaticThrust() override;
 
 private:
+
   void updateRobotModelImpl(const KDL::JntArray& joint_positions) override;
+ 
 };

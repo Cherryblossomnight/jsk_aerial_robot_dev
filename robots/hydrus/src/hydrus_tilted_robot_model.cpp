@@ -37,7 +37,7 @@ void HydrusTiltedRobotModel::updateRobotModelImpl(const KDL::JntArray& joint_pos
   double f_norm_pitch = atan2(-f(0), sqrt(f(1)*f(1) + f(2)*f(2)));
 
   /* set the hoverable frame as CoG and reupdate model */
-  setCogDesireOrientation(f_norm_roll, f_norm_pitch, 0);
+  //setCogDesireOrientation(f_norm_roll, f_norm_pitch, 0);
   HydrusRobotModel::updateRobotModelImpl(joint_positions);
 
   if(getVerbose())

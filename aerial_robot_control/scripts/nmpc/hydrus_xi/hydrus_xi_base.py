@@ -7,7 +7,7 @@ from tf_conversions import transformations as tf
 
 # Add parent directory to path to allow relative imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from rh_base import RecedingHorizonBase
+from nmpc_tilt_mt.rh_base import RecedingHorizonBase
 from hydrus_xi.hydrus_xi_reference_generator import HydrusXiReferenceGenerator
 
 
@@ -17,10 +17,10 @@ class HydrusXiBase(RecedingHorizonBase):
     Inherits from RecedingHorizonBase which also lays foundations for MHE classes.
 
     :param str model_name: Name of the model defined in controller file.
-    :param bool overwrite: Flag to overwrite existing c generated code for the OCP solver. Default: False
+
     """
 
-    def __init__(self, overwrite: bool = False):
+    def __init__(self, build: bool = False):
         #     The child classes only have specifications which define the controller specifications and need to set the following flags:
         # check if the model name is set
         # - model_name: Name of the model defined in controller file.
@@ -62,7 +62,7 @@ class HydrusXiBase(RecedingHorizonBase):
         self.acados_init_p = None  # initial value for parameters in acados. Mainly for physical parameters.
 
         # Call RecedingHorizon constructor coming as NMPC method
-        super().__init__("impedance", overwrite)
+        super().__init__("nmpc", build)
 
         # Create Reference Generator object
         self._reference_generator = self._create_reference_generator()
@@ -622,19 +622,20 @@ class HydrusXiBase(RecedingHorizonBase):
         wrench = ca.vertcat(ca.mtimes(self.rot_wb, self.fu_b), self.tau_u_b)
  
         least_squares = ca.mtimes((ca.mtimes(self.rot_wb, self.fu_b) - target_force).T, (ca.mtimes(self.rot_wb, self.fu_b) - target_force))+\
-                        ca.mtimes((self.tau_u_b - target_torque).T, (self.tau_u_b - target_torque)) + \
+                        5*ca.mtimes((self.tau_u_b - target_torque).T, (self.tau_u_b - target_torque)) + \
                         10*ca.mtimes((self.ft_c - self.f_ref).T, (self.ft_c - self.f_ref)) + \
                         10*ca.mtimes((self.g_s - self.g_ref).T, (self.g_s - self.g_ref))
         func = ca.Function('wrench_fun', [model.p[4:33], model.x, model.u], [least_squares])
         
-        #print(params)
+       
         #print(model.p)
         # print(model.u)
 
         x_fixed = ca.vertcat(x_now[0:16], g_opt)
         u_fixed = ca.vertcat(f_opt, u_cmd[4:8])
         func_new = func(model.p[4:33], x_fixed, u_fixed)
-
+ # print(target_force)
+        # print(target_torque)
 
 
         nlp = {'x': opt, 'p': model.p[4:33], 'f': func_new}
@@ -749,7 +750,7 @@ class HydrusXiBase(RecedingHorizonBase):
     
     def get_I_matrix(self, params, x_now):
         model = super().get_acados_model()
-        I_matrix_fun = ca.Function('I_matrix_fun', [model.p[4:30], model.x], [self.I])
+        I_matrix_fun = ca.Function('I_matrix_fun', [model.p[4:33], model.x], [self.I])
         return np.matrix(I_matrix_fun(params, x_now).full())
 
     def get_end_Jacobian(self, params, x_now):
@@ -787,7 +788,7 @@ class HydrusXiBase(RecedingHorizonBase):
         sol = solver(x0=x_now[13:16], p=params[0:6], lbg=[-np.pi/2,-np.pi/2,-np.pi/2], ubg=[np.pi/2,np.pi/2,np.pi/2])
         return np.array(sol['x'].full().flatten())
     
-    def create_acados_ocp_solver(self) -> AcadosOcpSolver:
+    def create_acados_ocp_solver(self, build: bool = True) -> AcadosOcpSolver:
         """
         Create generic acados solver for NMPC framework of a quadrotor.
         Generate c code into source folder in aerial_robot_control to be used in workflow.
@@ -838,10 +839,10 @@ class HydrusXiBase(RecedingHorizonBase):
              self.params["j_min"],
              self.params["j_min"],
              self.params["j_min"],
-             -2*np.pi,
-             -2*np.pi,
-             -2*np.pi,
-             -2*np.pi])
+             self.params["g_min"],
+             self.params["g_min"],
+             self.params["g_min"],
+             self.params["g_min"]])
 
         # if self.tilt and self.include_servo_model:
         #     ocp.constraints.lbx = np.append(ocp.constraints.lbx,
@@ -868,10 +869,10 @@ class HydrusXiBase(RecedingHorizonBase):
              self.params["j_max"],
              self.params["j_max"],
              self.params["j_max"],
-             2*np.pi,
-             2*np.pi,
-             2*np.pi,
-             2*np.pi])
+             self.params["g_max"],
+             self.params["g_max"],
+             self.params["g_max"],
+             self.params["g_max"]])
 
         # if self.tilt and self.include_servo_model:
         #     ocp.constraints.ubx = np.append(ocp.constraints.ubx,
@@ -889,7 +890,7 @@ class HydrusXiBase(RecedingHorizonBase):
 
         # - Terminal state box constraints bx_e
         # -- Index for vx, vy, vz, wx, wy, wz
-        ocp.constraints.idxbx_e = np.array([3, 4, 5, 10, 11, 12, 13, 14, 15])
+        ocp.constraints.idxbx_e = np.array([3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
 
         # -- Index for a1s, a2s, a3s, a4s
         # if self.tilt and self.include_servo_model:
@@ -911,9 +912,13 @@ class HydrusXiBase(RecedingHorizonBase):
              self.params["w_min"],
              self.params["w_min"],
              self.params["w_min"],
-             -np.pi/2,
-             -np.pi/2,
-             -np.pi/2])
+             self.params["j_min"],
+             self.params["j_min"],
+             self.params["j_min"],
+             self.params["g_min"],
+             self.params["g_min"],
+             self.params["g_min"],
+             self.params["g_min"]])
 
         # if self.tilt and self.include_servo_model:
         #     ocp.constraints.lbx_e = np.append(ocp.constraints.lbx_e,
@@ -931,15 +936,20 @@ class HydrusXiBase(RecedingHorizonBase):
 
         # -- Upper Terminal State Bound
         ocp.constraints.ubx_e = np.array(
-            [self.params["v_max"],
+             [self.params["v_max"],
              self.params["v_max"],
              self.params["v_max"],
              self.params["w_max"],
              self.params["w_max"],
              self.params["w_max"],
-             np.pi/2,
-             np.pi/2,
-             np.pi/2])
+             self.params["j_max"],
+             self.params["j_max"],
+             self.params["j_max"],
+             self.params["g_max"],
+             self.params["g_max"],
+             self.params["g_max"],
+             self.params["g_max"]])
+
 
         # if self.tilt and self.include_servo_model:
         #     ocp.constraints.ubx_e = np.append(ocp.constraints.ubx_e,
@@ -960,8 +970,8 @@ class HydrusXiBase(RecedingHorizonBase):
         # -- Index for ft1c, ft2c, ft3c, ft4c
         ocp.constraints.idxbu = np.array([0, 1, 2, 3])
         # -- Index for a1c, a2c, a3c, a4c
-        # if self.tilt:
-        #     ocp.constraints.idxbu = np.append(ocp.constraints.idxbu, [4, 5, 6, 7])
+        if self.tilt:
+            ocp.constraints.idxbu = np.append(ocp.constraints.idxbu, [4, 5, 6, 7])
 
         # -- Lower Input Bound
         ocp.constraints.lbu = np.array(
@@ -970,12 +980,12 @@ class HydrusXiBase(RecedingHorizonBase):
              self.params["thrust_min"],
              self.params["thrust_min"]])
 
-        # if self.tilt:
-        #     ocp.constraints.lbu = np.append(ocp.constraints.lbu,
-        #                                     [self.params["a_min"],
-        #                                      self.params["a_min"],
-        #                                      self.params["a_min"],
-        #                                      self.params["a_min"]])
+        if self.tilt:
+            ocp.constraints.lbu = np.append(ocp.constraints.lbu,
+                                            [self.params["g_min"],
+                                             self.params["g_min"],
+                                             self.params["g_min"],
+                                             self.params["g_min"]])
 
         # -- Upper Input Bound
         ocp.constraints.ubu = np.array(
@@ -984,12 +994,12 @@ class HydrusXiBase(RecedingHorizonBase):
              self.params["thrust_max"],
              self.params["thrust_max"]])
 
-        # if self.tilt:
-        #     ocp.constraints.ubu = np.append(ocp.constraints.ubu,
-        #                                     [self.params["a_max"],
-        #                                      self.params["a_max"],
-        #                                      self.params["a_max"],
-        #                                      self.params["a_max"]])
+        if self.tilt:
+            ocp.constraints.ubu = np.append(ocp.constraints.ubu,
+                                            [self.params["g_max"],
+                                             self.params["g_max"],
+                                             self.params["g_max"],
+                                             self.params["g_max"]])
 
         # Initial state and reference: Set all values such that robot is hovering
         # TODO debatable which initial states/inputs make sense -> not necessarily better than just all-zero!
@@ -1055,7 +1065,7 @@ class HydrusXiBase(RecedingHorizonBase):
                                         self.phys.dr1, self.phys.dr2, self.phys.dr3, self.phys.dr4,
                                         self.phys.kq_d_kt, self.phys.m, self.phys.gravity)
 
-    def create_acados_sim_solver(self, ts_sim: float, is_build: bool = True) -> AcadosSimSolver:
+    def create_acados_sim_solver(self, ts_sim: float, build: bool = True) -> AcadosSimSolver:
         ocp_model = super().get_acados_model()
 
         acados_sim = AcadosSim()
@@ -1073,6 +1083,6 @@ class HydrusXiBase(RecedingHorizonBase):
    
 
         acados_sim.solver_options.T = ts_sim
-        return AcadosSimSolver(acados_sim, json_file=ocp_model.name + "_acados_sim.json", build=is_build)
+        return AcadosSimSolver(acados_sim, json_file=ocp_model.name + "_acados_sim.json", build=build)
 
   

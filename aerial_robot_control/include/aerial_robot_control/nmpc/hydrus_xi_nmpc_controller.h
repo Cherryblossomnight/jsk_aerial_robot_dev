@@ -35,6 +35,8 @@
 #include "aerial_robot_msgs/TrackTrajGoal.h"
 #include "aerial_robot_msgs/TrackTrajResult.h"
 
+/* opt */
+#include <nlopt.hpp>
 using NMPCControlDynamicConfig = dynamic_reconfigure::Server<aerial_robot_control::NMPCConfig>;
 
 namespace aerial_robot_control
@@ -64,6 +66,7 @@ protected:
   ros::Publisher pub_flight_cmd_;                // for spinal
   ros::Publisher pub_gimbal_control_;            // for gimbal control
   ros::Publisher pub_flight_config_cmd_spinal_;  // for spinal, enable the gyro measurement after the takeoff
+  ros::Publisher pub_x_u_ref_;                   // for publishing reference x_u
 
   ros::ServiceClient srv_set_control_mode_;
   std::vector<boost::shared_ptr<NMPCControlDynamicConfig>> nmpc_reconf_servers_;
@@ -73,23 +76,31 @@ protected:
   ros::Subscriber sub_set_ref_x_u_;
   ros::Subscriber sub_set_traj_;
   ros::Subscriber sub_set_fixed_rotor_;
+  ros::Subscriber sub_target_external_wrench_;
+
+  geometry_msgs::WrenchStamped target_external_wrench_;
+  ros::Time time_last_target_external_wrench_;
+
 
   bool is_attitude_ctrl_;
   bool is_body_rate_ctrl_;
   bool is_print_phys_params_;
   bool is_debug_;
 
-  double mass_;
+  std::vector<double> mass_;
   double gravity_const_;
-  std::vector<double> inertia_;
+  std::vector<std::vector<double>> inertia_;
   int motor_num_;
   double t_rotor_;
   double thrust_ctrl_max_;
   double thrust_ctrl_min_;
   int joint_num_;
   double t_servo_;
-  double servo_angle_max_;
-  double servo_angle_min_;
+  double joint_angle_max_;
+  double joint_angle_min_;
+  int gimbal_num_;
+  double gimbal_angle_max_;
+  double gimbal_angle_min_;
 
   double t_nmpc_samp_;
   double t_nmpc_step_;
@@ -99,6 +110,7 @@ protected:
   int idx_p_phys_end_ = 0;
 
   std::vector<double> joint_angles_;
+  std::vector<double> gimbal_angles_;
 
   Eigen::MatrixXd alloc_mat_;
   Eigen::MatrixXd alloc_mat_pinv_;
@@ -125,6 +137,14 @@ protected:
   bool has_restored_vel_ = false;  // whether the velocity is restored to set value when hovering
   double vel_max_, vel_min_, vel_limit_takeoff_;
 
+  boost::shared_ptr<nlopt::opt> thrust_gimbal_nl_solver_;
+  std::vector<double> opt_result_;
+
+  int count_ = 0;
+
+  boost::shared_ptr<aerial_robot_model::RobotModel> robot_model_for_plan_;
+
+
   /* initialize() */
   void initGeneralParams() override;
   void initNMPCCostW() override;
@@ -133,6 +153,7 @@ protected:
   void setControlMode();
   virtual inline void initActuatorStates()
   {
+    gimbal_angles_.resize(gimbal_num_, 0.0);
     joint_angles_.resize(joint_num_, 0.0);
   }
 
@@ -155,7 +176,7 @@ protected:
   void setPointRefFromNavigator(bool is_shifted_not_set_all);
   void setXrUrRef(const tf::Vector3& ref_pos_i, const tf::Vector3& ref_vel_i, const tf::Vector3& ref_acc_i,
                   const tf::Quaternion& ref_quat_ib, const tf::Vector3& ref_omega_b, const tf::Vector3& ref_ang_acc_b,
-                  const int& horizon_idx);
+                  const tf::Vector3& ref_ext_force_i, const tf::Vector3& ref_ext_torque_b, const int& horizon_idx);
   virtual void allocateToXU(const tf::Vector3& ref_pos_i, const tf::Vector3& ref_vel_i,
                             const tf::Quaternion& ref_quat_ib, const tf::Vector3& ref_omega_b,
                             const VectorXd& ref_wrench_b, vector<double>& x, vector<double>& u);
@@ -169,6 +190,7 @@ protected:
   void callbackSetRefXU(const aerial_robot_msgs::PredXUConstPtr& msg) override;
   void callbackSetRefTraj(const trajectory_msgs::MultiDOFJointTrajectoryConstPtr& msg);
   void callbackSetFixedRotor(const aerial_robot_msgs::FixRotorConstPtr& msg);
+  void callbackTargetExternalWrench(const geometry_msgs::WrenchStampedConstPtr& msg);
   virtual void cfgNMPCCallback(NMPCConfig& config, uint32_t level);
 
   /* utils */

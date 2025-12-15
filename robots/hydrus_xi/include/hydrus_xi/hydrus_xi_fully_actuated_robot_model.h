@@ -50,4 +50,5 @@ public:
                                   double fc_t_min_thre = 0,
                                   double epsilon = 10.0);
   virtual ~HydrusXiFullyActuatedRobotModel() = default;
+
 };

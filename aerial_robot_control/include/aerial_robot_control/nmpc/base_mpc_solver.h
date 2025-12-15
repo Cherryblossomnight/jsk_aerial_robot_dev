@@ -107,10 +107,8 @@ public:
   {
     if (x0.size() != NX_ || u0.size() != NU_)
       throw std::length_error("x0 or u0 size is not equal to NX_ or NU_");
-
-    std::vector xr_init(NN_ + 1, x0);
-    std::vector ur_init(NN_, u0);
-
+    std::vector<std::vector<double>> xr_init(NN_ + 1, x0);
+    std::vector<std::vector<double>> ur_init(NN_, u0);
     resetXrUr(xr_init, ur_init);
   }
 
@@ -129,16 +127,18 @@ public:
     setFeedbackConstraints(bx0);
 
     double min_time = solveOCPOnce();
-
+    
     getSolution();
+      // printAcadosReference();
+      // printAcadosSolution();
 
     if (is_debug)
     {
-      printAcadosWeight();
-      printAcadosMatrix();
-      printAcadosReference();
-      printAcadosSolution();
-      printAcadosStatus(min_time);
+      // printAcadosWeight();
+      // printAcadosMatrix();
+      // printAcadosReference();
+      // printAcadosSolution();
+      // printAcadosStatus(min_time);
     }
 
     return 0;
@@ -381,7 +381,7 @@ public:
     std::stringstream ss;
 
     ss << "\n--- xr ---\n";
-    for (int i = 0; i <= NN_; i++)
+    for (int i = 0; i <= 3; i++)
     {
       ss << "Xr Row " << i << ":\n";
       for (int j = 0; j < NX_; j++)
@@ -395,7 +395,7 @@ public:
     ss.str("");  // Clearing the string stream
 
     ss << "\n--- ur ---\n";
-    for (int i = 0; i < NN_; i++)
+    for (int i = 0; i < 3; i++)
     {
       ss << "Ur Row " << i << ":\n";
       for (int j = 0; j < NU_; j++)
@@ -412,7 +412,7 @@ public:
     std::stringstream ss;
 
     ss << "\n--- x_traj ---\n";
-    for (int i = 0; i <= NN_; i++)
+    for (int i = 0; i <= 3; i++)
     {
       ss << "X Row " << i << ":\n";
       for (int j = 0; j < NX_; j++)
@@ -426,7 +426,7 @@ public:
     ss.str("");  // Clearing the string stream
 
     ss << "\n--- u_traj ---\n";
-    for (int i = 0; i < NN_; i++)
+    for (int i = 0; i < 3; i++)
     {
       ss << "U Row " << i << ":\n";
       for (int j = 0; j < NU_; j++)

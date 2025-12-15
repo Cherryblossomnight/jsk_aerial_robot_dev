@@ -1,4 +1,4 @@
-mpc_solver_name: aerial_robot_control::mpc_solver::TiltQdServoDistMdlMPCSolver
+mpc_solver_name: aerial_robot_control::mpc_solver::HydrusXiMPCSolver
 aerial_robot_control_name: aerial_robot_control/nmpc_controller/hydrus_xi/hydrus_xi_nmpc
 
 controller:
@@ -24,7 +24,7 @@ controller:
     g_max: 6.28319
     g_min: -6.28319
 
-    thrust_max: 30 # N
+    thrust_max: 25 # N
     thrust_min: 0 # N
 
     a_max: 3.92699  # 180 + 45 degree ~ 0.5
@@ -34,15 +34,15 @@ controller:
     Qp_xy: 600
     Qp_z: 600
     Qv_xy: 10
-    Qv_z: 10
-    Qq_xy: 1200
-    Qq_z: 600
-    Qw_xy: 15
+    Qv_z: 15
+    Qq_xy: 600
+    Qq_z: 1000
+    Qw_xy: 10
     Qw_z: 10
-    Qj: 100
-    Qg: 20
-    Rt: 0.5
-    Rg: 0.01  # difference of ac
+    Qj: 0.0
+    Qg: 50.0
+    Rt: 5.0
+    Rg: 3.0  # difference of ac
 
     is_attitude_ctrl: false
     is_body_rate_ctrl: false

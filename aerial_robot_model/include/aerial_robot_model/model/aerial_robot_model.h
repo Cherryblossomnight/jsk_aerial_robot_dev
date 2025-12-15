@@ -207,8 +207,19 @@ public:
   void convertFromCoGToEEContact(const tf::Vector3& cog_pos_in_w, const tf::Vector3& cog_vel_in_w,
                                  const tf::Quaternion& cog_quat, const tf::Vector3& cog_omega, tf::Vector3& ee_pos_in_w,
                                  tf::Vector3& ee_vel_in_w, tf::Quaternion& ee_quat, tf::Vector3& ee_omega) const;
+  Eigen::VectorXd getDesiredWrench() {return desired_wrench_;}
+  void setDesiredWrench(const Eigen::VectorXd& wrench) {desired_wrench_ = wrench;}
+  Eigen::MatrixXd getRotationMatrix() {return rotation_matrix_;}
+  void setRotationMatrix(const Eigen::MatrixXd& R) {rotation_matrix_ = R;}
+  Eigen::VectorXd getThrustCmd() {return thrust_cmds;}
+  void setThrustCmd(const Eigen::VectorXd& cmds) {thrust_cmds = cmds;}
 
+  
+    
 private:
+  Eigen::VectorXd desired_wrench_;
+  Eigen::MatrixXd rotation_matrix_;
+  Eigen::VectorXd thrust_cmds;
   // kinematics
   bool initialized_;
   bool fixed_model_;

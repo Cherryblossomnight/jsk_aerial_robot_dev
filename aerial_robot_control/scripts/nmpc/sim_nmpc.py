@@ -4,26 +4,12 @@ import time
 import numpy as np
 import argparse
 
-<<<<<<< HEAD
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_bi")
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_tri")
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_qd")
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/hydrus")
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/archive")
 
-from nmpc_viz import Visualizer
-
-# Quadrotor
-import tilt_qd.phys_param_beetle_omni as phys_omni
-import archive.phys_param_beetle_art as phys_art
-import hydrus.phys_param_hydrus as phys_hydrus
-=======
 from nmpc_tilt_mt.utils.nmpc_viz import Visualizer
 
 # Quadrotor
 import nmpc_tilt_mt.tilt_qd.phys_param_beetle_omni as phys_omni
 import nmpc_tilt_mt.archive.phys_param_beetle_art as phys_art
->>>>>>> upstream/develop/MPC_tilt_mt
 
 # - Naive models
 from nmpc_tilt_mt.archive.tilt_qd_no_servo_ac_cost import NMPCTiltQdNoServoAcCost

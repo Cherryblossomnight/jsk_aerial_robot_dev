@@ -33,4 +33,10 @@
     <class type="aerial_robot_control::mpc_solver::TiltBi2OrdServoMdlMPCSolver" base_class_type="aerial_robot_control::mpc_solver::BaseMPCSolver">
         <description>Nonlinear Model Predictive Control with Tilt Bi 2nd Order Servo Model.</description>
     </class>
+
+    <!-- hydrus_xi -->
+    <class type="aerial_robot_control::mpc_solver::HydrusXiMPCSolver" base_class_type="aerial_robot_control::mpc_solver::BaseMPCSolver">
+        <description>Nonlinear Model Predictive Control for Hydrus Xi.</description>
+    </class>
+    
 </library>

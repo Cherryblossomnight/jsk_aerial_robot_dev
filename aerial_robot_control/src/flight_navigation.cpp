@@ -33,6 +33,7 @@ void BaseNavigator::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
 {
   nh_ = nh;
   nhp_ = nhp;
+  loop_du_ = 0.01;
 
   rosParamInit();
 
@@ -142,9 +143,10 @@ void BaseNavigator::batteryCheckCallback(const std_msgs::Float32ConstPtr& msg)
 
 void BaseNavigator::naviCallback(const aerial_robot_msgs::FlightNavConstPtr& msg)
 {
-  if (getNaviState() == TAKEOFF_STATE || getNaviState() == LAND_STATE)
-    return;
 
+  // if (getNaviState() == TAKEOFF_STATE || getNaviState() == LAND_STATE)
+  //   return;
+ 
   gps_waypoint_ = false;
 
   if (force_att_control_flag_)
@@ -156,16 +158,34 @@ void BaseNavigator::naviCallback(const aerial_robot_msgs::FlightNavConstPtr& msg
     setTargetYaw(angles::normalize_angle(msg->target_yaw));
     setTargetOmegaZ(0);
   }
+  if(msg->yaw_nav_mode == aerial_robot_msgs::FlightNav::VEL_MODE)
+  {
+    setTargetOmegaZ(msg->target_omega_z);
+    teleop_reset_time_ = teleop_reset_duration_ + ros::Time::now().toSec();
+  }
   if (msg->yaw_nav_mode == aerial_robot_msgs::FlightNav::POS_VEL_MODE)
   {
     setTargetYaw(angles::normalize_angle(msg->target_yaw));
     setTargetOmegaZ(msg->target_omega_z);
   }
 
+    if(msg->roll_nav_mode == aerial_robot_msgs::FlightNav::VEL_MODE)
+  {
+    setTargetOmegaX(msg->target_omega_x);
+    teleop_reset_time_ = teleop_reset_duration_ + ros::Time::now().toSec();
+  }
+
+  if(msg->pitch_nav_mode == aerial_robot_msgs::FlightNav::VEL_MODE)
+  {
+    setTargetOmegaY(msg->target_omega_y);
+    teleop_reset_time_ = teleop_reset_duration_ + ros::Time::now().toSec();
+  }
+
   /* xy control */
   switch (msg->pos_xy_nav_mode)
   {
     case aerial_robot_msgs::FlightNav::POS_MODE: {
+
       tf::Vector3 target_cog_pos(msg->target_pos_x, msg->target_pos_y, 0);
       if (msg->target == aerial_robot_msgs::FlightNav::BASELINK)
       {
@@ -203,10 +223,12 @@ void BaseNavigator::naviCallback(const aerial_robot_msgs::FlightNavConstPtr& msg
       }
       /* should be in COG frame */
       xy_control_mode_ = VEL_CONTROL_MODE;
+      teleop_reset_time_ = teleop_reset_duration_ + ros::Time::now().toSec();
       switch (msg->control_frame)
       {
         case WORLD_FRAME: {
           setTargetVelX(msg->target_vel_x);
+           std::cout<<getTargetVel().x()<<std::endl;
           setTargetVelY(msg->target_vel_y);
           break;
         }
@@ -265,7 +287,6 @@ void BaseNavigator::naviCallback(const aerial_robot_msgs::FlightNavConstPtr& msg
     case aerial_robot_msgs::FlightNav::GPS_WAYPOINT_MODE: {
       target_wp_ = geodesy::toMsg(msg->target_pos_x, msg->target_pos_y);
       gps_waypoint_ = true;
-
       break;
     }
   }
@@ -276,8 +297,10 @@ void BaseNavigator::naviCallback(const aerial_robot_msgs::FlightNavConstPtr& msg
   if (msg->pos_z_nav_mode == aerial_robot_msgs::FlightNav::VEL_MODE)
   {
     /* special */
-    addTargetPosZ(msg->target_pos_diff_z);
-    setTargetVelZ(0);
+    //addTargetPosZ(msg->target_pos_diff_z);
+   // setTargetVelZ(0);
+    setTargetVelZ(msg->target_vel_z);
+     teleop_reset_time_ = teleop_reset_duration_ + ros::Time::now().toSec();
   }
   else if (msg->pos_z_nav_mode == aerial_robot_msgs::FlightNav::POS_MODE)
   {
@@ -289,6 +312,7 @@ void BaseNavigator::naviCallback(const aerial_robot_msgs::FlightNavConstPtr& msg
     setTargetPosZ(msg->target_pos_z);
     setTargetVelZ(msg->target_vel_z);
   }
+  std::cout<<getTargetVel().x()<<std::endl;
 }
 
 const sensor_msgs::Joy BaseNavigator::ps4joyToPs3joyConvert(const sensor_msgs::Joy& ps4_joy_msg)
@@ -605,6 +629,8 @@ void BaseNavigator::joyStickControl(const sensor_msgs::JoyConstPtr& joy_msg)
 
 void BaseNavigator::update()
 {
+  // std::cout<<getTargetPos().x()<<","<<getTargetPos().y()<<","<<getTargetPos().z()<<std::endl;
+  // std::cout<<getTargetVel().x()<<","<<getTargetVel().y()<<","<<getTargetVel().z()<<std::endl;
   if (force_att_control_flag_)
   {
     if (getNaviState() == LAND_STATE)
@@ -660,6 +686,31 @@ void BaseNavigator::update()
       normal_land = true;
       ROS_ERROR("Normal Landing: att control mode, because no joy control");
     }
+
+  //   if (trajectory_mode_)
+  //   {
+  //     updatePoseFromTrajectory();
+  //   }
+  //  else
+  //   {
+      /* force reset velocity in idling mode */
+      if (ros::Time::now().toSec() > teleop_reset_time_)
+        {
+          setTargetZeroVel();
+          setTargetOmegaZ(0);
+          setTargetOmegaY(0);
+             setTargetOmegaX(0);
+        }
+
+      /* uniform linear motion */
+      addTargetPos(getTargetVel() * loop_du_);
+         addTargetPitch(getTargetOmega().y() * loop_du_);
+      addTargetYaw(getTargetOmega().z() * loop_du_);
+    // }
+
+  tf::Vector3 curr_pos = estimator_->getPos(Frame::COG, estimate_mode_);
+  tf::Vector3 curr_vel = estimator_->getVel(Frame::COG, estimate_mode_);
+  tf::Vector3 delta = target_pos_ - curr_pos;
 
     /* low voltage flag */
     if (low_voltage_flag_)
@@ -764,7 +815,6 @@ void BaseNavigator::update()
     case HOVER_STATE: {
       if (force_att_control_flag_)
         break;
-
       if (gps_waypoint_)
       {
         if (ros::Time::now().toSec() - gps_waypoint_time_ > gps_waypoint_check_du_)
@@ -795,11 +845,11 @@ void BaseNavigator::update()
           gps_waypoint_time_ = ros::Time::now().toSec();
         }
       }
-
       if (vel_based_waypoint_)
       {
         delta.setZ(0);  // we do not need z
         /* vel nav */
+
         if (delta.length() > vel_nav_threshold_)
         {
           tf::Vector3 nav_vel = delta * vel_nav_gain_;
@@ -807,7 +857,7 @@ void BaseNavigator::update()
           double speed = nav_vel.length();
           if (speed > nav_vel_limit_)
             nav_vel *= (nav_vel_limit_ / speed);
-
+             // std::cout<<"a case"<<std::endl;
           setTargetVelX(nav_vel.x());
           setTargetVelY(nav_vel.y());
         }
@@ -829,7 +879,6 @@ void BaseNavigator::update()
           {
             ROS_WARN("back to pos nav control for way point");
           }
-
           xy_control_mode_ = POS_CONTROL_MODE;
           vel_based_waypoint_ = false;
           setTargetVelX(0);
@@ -837,6 +886,7 @@ void BaseNavigator::update()
           setTargetVelZ(0);
         }
       }
+
       break;
     }
     case STOP_STATE: {
@@ -858,7 +908,7 @@ void BaseNavigator::update()
       break;
     }
   }
-
+  
   /* publish the state */
   std_msgs::UInt8 state_msg;
   state_msg.data = getNaviState();
@@ -882,7 +932,7 @@ void BaseNavigator::rosParamInit()
   getParam<double>(nh, "max_target_vel", max_target_vel_, 0.0);
   getParam<double>(nh, "max_target_yaw_rate", max_target_yaw_rate_, 0.0);
   getParam<double>(nh, "max_target_tilt_angle", max_target_tilt_angle_, 1.0);
-
+  getParam<double>(nh, "teleop_reset_duration", teleop_reset_duration_, 0.5);
   //*** auto vel nav
   getParam<double>(nh, "nav_vel_limit", nav_vel_limit_, 0.2);
   getParam<double>(nh, "vel_nav_threshold", vel_nav_threshold_, 0.4);

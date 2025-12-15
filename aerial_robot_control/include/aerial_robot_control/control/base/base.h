@@ -42,6 +42,7 @@
 #include <ros/ros.h>
 #include <spinal/PwmInfo.h>
 #include <spinal/UavInfo.h>
+#include <std_msgs/Bool.h>
 
 namespace aerial_robot_control
 {
@@ -134,7 +135,7 @@ namespace aerial_robot_control
       return true;
     }
 
-    virtual void activate()
+virtual void activate()
     {
       /* motor related info */
       /* initialize setting */
@@ -189,6 +190,7 @@ namespace aerial_robot_control
     double max_pwm_, min_pwm_;
     double min_thrust_;
     std::vector<spinal::MotorInfo> motor_info_;
+    std::mutex motor_info_mutex;
 
     double force_landing_thrust_; //pwm
     int pwm_conversion_mode_;

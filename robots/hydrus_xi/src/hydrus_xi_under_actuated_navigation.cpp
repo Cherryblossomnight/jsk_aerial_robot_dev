@@ -333,35 +333,35 @@ bool HydrusXiUnderActuatedNavigator::plan()
   double start_time = ros::Time::now().toSec();
   double max_f = 0;
   try
-    {
-      nlopt::result result = vectoring_nl_solver_->optimize(opt_gimbal_angles_, max_f);
+  {
+    nlopt::result result = vectoring_nl_solver_->optimize(opt_gimbal_angles_, max_f);
 
-      double roll,pitch,yaw;
-      robot_model_for_plan_->getCogDesireOrientation<KDL::Rotation>().GetRPY(roll, pitch, yaw);
+    double roll,pitch,yaw;
+    robot_model_for_plan_->getCogDesireOrientation<KDL::Rotation>().GetRPY(roll, pitch, yaw);
 
-      if(prev_opt_gimbal_angles_.size() == 0) prev_opt_gimbal_angles_ = opt_gimbal_angles_;
+    if(prev_opt_gimbal_angles_.size() == 0) prev_opt_gimbal_angles_ = opt_gimbal_angles_;
 
-      if(plan_verbose_)
-        {
-          std::cout << "nlopt: " << std::setprecision(7)
-                    << ros::Time::now().toSec() - start_time  <<  "[sec], cnt: " << cnt;
-          std::cout << ", found optimal gimbal angles: ";
-          for(auto it: opt_gimbal_angles_) std::cout << std::setprecision(5) << it << " ";
-          std::cout << ", max min yaw: " << max_min_yaw_;
-          std::cout << ", fc t min: " << robot_model_for_plan_->getFeasibleControlTMin();
-          std::cout << ", atttidue: [" << roll << ", " << pitch;
-          std::cout << "], force: [" << robot_model_for_plan_->getStaticThrust().transpose();
-          std::cout << "]" << std::endl;
-        }
+    if(plan_verbose_)
+      {
+        std::cout << "nlopt: " << std::setprecision(7)
+                  << ros::Time::now().toSec() - start_time  <<  "[sec], cnt: " << cnt;
+        std::cout << ", found optimal gimbal angles: ";
+        for(auto it: opt_gimbal_angles_) std::cout << std::setprecision(5) << it << " ";
+        std::cout << ", max min yaw: " << max_min_yaw_;
+        std::cout << ", fc t min: " << robot_model_for_plan_->getFeasibleControlTMin();
+        std::cout << ", atttidue: [" << roll << ", " << pitch;
+        std::cout << "], force: [" << robot_model_for_plan_->getStaticThrust().transpose();
+        std::cout << "]" << std::endl;
+      }
 
 
-      cnt = 0;
-      invalid_cnt = 0;
-    }
+    cnt = 0;
+    invalid_cnt = 0;
+  }
   catch(std::exception &e)
-    {
-      std::cout << "nlopt failed: " << e.what() << std::endl;
-    }
+  {
+    std::cout << "nlopt failed: " << e.what() << std::endl;
+  }
 
   /* publish the gimbal angles if necessary */
   sensor_msgs::JointState gimbal_msg;
@@ -372,10 +372,9 @@ bool HydrusXiUnderActuatedNavigator::plan()
       gimbal_msg.name.push_back(control_gimbal_names_.at(i));
       gimbal_msg.position.push_back(opt_gimbal_angles_.at(i));
     }
-  gimbal_ctrl_pub_.publish(gimbal_msg);
+  //gimbal_ctrl_pub_.publish(gimbal_msg);
 
   prev_opt_gimbal_angles_ = opt_gimbal_angles_;
-
   return true;
 }
 

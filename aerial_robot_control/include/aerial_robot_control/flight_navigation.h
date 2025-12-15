@@ -104,7 +104,8 @@ public:
     inline tf::Vector3 getTargetAcc() {return target_acc_;}
     inline tf::Vector3 getTargetRPY() {return target_rpy_;}
     inline tf::Vector3 getTargetOmega() {return target_omega_;}
-
+      inline void addTargetPitch(float value) { setTargetPitch(angles::normalize_angle(target_rpy_.y() + value)); }
+    inline void addTargetYaw(float value) { setTargetYaw(angles::normalize_angle(target_rpy_.z() + value)); }
     inline void setTargetRoll(float value) { target_rpy_.setX(value); }
     inline void setTargetOmegaX(float value) { target_omega_.setX(value); }
     inline void setTargetPitch(float value) { target_rpy_.setY(value); }
@@ -113,6 +114,9 @@ public:
     inline void setTargetOmegaZ(float value) { target_omega_.setZ(value); }
     inline void setTargetRPY(tf::Vector3 value) { target_rpy_ = value; }
     inline void setTargetOmega(tf::Vector3 value) { target_omega_ = value; }
+        inline void setTargetZeroVel() { setTargetVel(0,0,0); }
+          inline void setTargetVel(tf::Vector3 vel) { target_vel_ = vel; }
+    inline void setTargetVel(double x, double y, double z) { setTargetVel(tf::Vector3(x, y, z)); }
     inline void setTargetPosX( float value){  target_pos_.setX(value);}
     inline void setTargetVelX( float value){  target_vel_.setX(value);}
     inline void setTargetAccX( float value){  target_acc_.setX(value);}
@@ -123,7 +127,8 @@ public:
     inline void setTargetVelZ( float value){  target_vel_.setZ(value);}
     inline void setTargetAccZ( float value){  target_acc_.setZ(value);}
     inline void addTargetPosZ( float value){  target_pos_ += tf::Vector3(0, 0, value);}
-
+    inline void addTargetPos(tf::Vector3 diff_pos) { target_pos_ += diff_pos; }
+    inline void addTargetPos(double x, double y, double z) { addTargetPos(tf::Vector3(x, y, z)); }
   inline void setTeleopFlag(bool teleop_flag)
   {
     teleop_flag_ = teleop_flag;
@@ -281,7 +286,8 @@ protected:
   double convergent_duration_;
   double z_convergent_thresh_;
   double xy_convergent_thresh_;
-
+  double teleop_reset_time_;
+  double teleop_reset_duration_;
   /* target value */
   tf::Vector3 target_pos_, target_vel_, target_acc_;
   tf::Vector3 target_rpy_, target_omega_;
@@ -336,6 +342,8 @@ protected:
   double bat_resistance_;
   double bat_resistance_voltage_rate_;
   double hovering_current_;
+
+  double loop_du_;
 
   virtual void rosParamInit();
   virtual void naviCallback(const aerial_robot_msgs::FlightNavConstPtr& msg);

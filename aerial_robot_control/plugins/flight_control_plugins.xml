@@ -57,4 +57,8 @@
     <description>NMPC controller for tilt bi considering 2-ord servo model </description>
   </class>
 
+<!-- hydrus_xi -->
+  <class name="aerial_robot_control/nmpc_controller/hydrus_xi/hydrus_xi_nmpc" type="aerial_robot_control::nmpc::HydrusXiNMPC" base_class_type="aerial_robot_control::ControlBase">
+    <description>NMPC controller for hydrus_xi </description>
+  </class>
 </library>

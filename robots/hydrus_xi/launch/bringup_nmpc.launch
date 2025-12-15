@@ -48,19 +48,21 @@
     <rosparam file="$(arg sensor_config_file)" command="load" />
     <rosparam file="$(arg config_dir)/$(arg type)/Simulation.yaml" command="load" if="$(arg simulation)"/>
 
-    ###########  Flight Control  ###########
-    <rosparam file="$(arg config_dir)/$(arg type)/FlightControl.yaml" command="load" />
+    ###########  Control  ###########
+    <rosparam file="$(arg config_dir)/quad/PhysParamHydrusXi.yaml" command="load" />
+    <rosparam file="$(arg config_dir)/quad/HydrusXiNMPC.yaml" command="load" />
 
     ###########  Navigation ###############
     <rosparam file="$(arg config_dir)/$(arg type)/NavigationConfig.yaml" command="load" />
   </group>
 
   ###########  Base Platform  ###########
-  <node pkg="aerial_robot_base" type="aerial_robot_base_node" name="aerial_robot_base_node" ns="$(arg robot_ns)" output="screen" >
+  <node pkg="aerial_robot_base" type="aerial_robot_base_node" name="aerial_robot_base_node" ns="$(arg robot_ns)" output="screen">
     <param name="tf_prefix" value="$(arg robot_ns)"/>
     <param name="param_verbose" value="false"/>
-    <param name="main_rate" value="40"/>
+    <param name="main_rate" value="100"/>
   </node>
+
 
   ###########  Robot Model  ###########
   <arg name="description_mode" value="urdf" unless="$(arg simulation)" />

@@ -95,6 +95,7 @@ target_link_libraries(mpc_solver_plugins ${catkin_LIBRARIES} acados
         ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_tri_servo_mdl/c_generated_code/libacados_ocp_solver_tilt_tri_servo_mdl.so
         ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_bi_servo_mdl/c_generated_code/libacados_ocp_solver_tilt_bi_servo_mdl.so
         ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/tilt_bi_2_ord_servo_mdl/c_generated_code/libacados_ocp_solver_tilt_bi_2_ord_servo_mdl.so
+        ${PROJECT_SOURCE_DIR}/include/aerial_robot_control/nmpc/hydrus_xi_normal/c_generated_code/libacados_ocp_solver_hydrus_xi_normal.so
 )
 add_dependencies(mpc_solver_plugins gen_acados_code)
 
@@ -113,6 +114,7 @@ add_library(flight_control_pluginlib
         src/nmpc/tilt_mt_servo_thrust_dist_nmpc_controller.cpp
         src/nmpc/tilt_mt_servo_thrust_imp_nmpc_controller.cpp
         src/nmpc/tilt_bi_2_ord_servo_mdl/nmpc_controller.cpp
+        src/nmpc/hydrus_xi_nmpc_controller.cpp
   )
 target_link_libraries(flight_control_pluginlib ${catkin_LIBRARIES} control_utils mpc_solver_plugins wrench_est_plugins)
 add_dependencies(flight_control_pluginlib  ${PROJECT_NAME}_gencfg mpc_solver_plugins wrench_est_plugins)

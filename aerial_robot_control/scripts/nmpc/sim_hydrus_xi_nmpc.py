@@ -6,49 +6,15 @@ import argparse
 from tf.transformations import euler_from_quaternion
 from tf.transformations import quaternion_matrix
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_bi")
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_tri")
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/tilt_qd")
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/hydrus_xi")
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/archive")
 
 from imp_viz import Visualizer
 
-# Quadrotor
-import tilt_qd.phys_param_beetle_omni as phys_omni
-import archive.phys_param_beetle_art as phys_art
-import hydrus_xi.phys_param_hydrus_xi as phys_hydrus_xi
-# - Naive models
-from archive.tilt_qd_no_servo_ac_cost import NMPCTiltQdNoServoAcCost
-from tilt_qd.tilt_qd_no_servo import NMPCTiltQdNoServo
 # Hydrus
 from hydrus_xi.hydrus_xi_normal import HydrusXiNormal
 from hydrus_xi.hydrus_xi_ext_wrench import HydrusXiExtWrench
-# - Consider the servo delay with its model
-from tilt_qd.tilt_qd_servo import NMPCTiltQdServo
-from tilt_qd.tilt_qd_servo_dist import NMPCTiltQdServoDist
-from archive.tilt_qd_servo_drag_w_dist import NMPCTiltQdServoDragDist
-from archive.tilt_qd_servo_w_cog_end_dist import NMPCTiltQdServoWCogEndDist
 
-from archive.tilt_qd_servo_old_cost import NMPCTiltQdServoOldCost
-from tilt_qd.tilt_qd_servo_diff import NMPCTiltQdServoDiff
-
-# - Consider the thrust delay with its model
-from tilt_qd.tilt_qd_thrust import NMPCTiltQdThrust
-
-# - Consider the servo & thrust delay with its models
-from tilt_qd.tilt_qd_servo_thrust import NMPCTiltQdServoThrust
-from tilt_qd.tilt_qd_servo_thrust_dist import NMPCTiltQdServoThrustDist
-from archive.tilt_qd_servo_thrust_drag import NMPCTiltQdServoThrustDrag
-
-# Birotor
-from tilt_bi.tilt_bi_servo import NMPCTiltBiServo
-from tilt_bi.tilt_bi_2ord_servo import NMPCTiltBi2OrdServo
-
-# Trirotor
-from tilt_tri.tilt_tri_servo import NMPCTiltTriServo
-from tilt_tri.tilt_tri_servo_dist import NMPCTiltTriServoDist
-
+import hydrus_xi.phys_param_hydrus_xi as phys_hydrus_xi
 
 def main(args):
     # ========== Init ==========
@@ -59,41 +25,8 @@ def main(args):
             nmpc = HydrusXiNormal(phys=phys_hydrus_xi)
         elif args.model == 1:
             nmpc = HydrusXiExtWrench(phys=phys_hydrus_xi)
-
-        # Archived methods
-        elif args.model == 91:
-            nmpc = NMPCTiltQdNoServoAcCost()
-        elif args.model == 92:
-            nmpc = NMPCTiltQdServoOldCost()
-        elif args.model == 93:
-            nmpc = NMPCTiltQdServoDiff()
-            alpha_integ = np.zeros(4)
-        elif args.model == 94:
-            nmpc = NMPCTiltQdServoDragDist()
-        elif args.model == 95:
-            nmpc = NMPCTiltQdServoThrustDrag()
-        elif args.model == 96:
-            nmpc = NMPCTiltQdServoWCogEndDist()
         else:
             raise ValueError(f"Invalid control model {args.model}.")
-
-    elif args.arch == 'bi':
-
-        if args.model == 0:
-            nmpc = NMPCTiltBiServo()
-        elif args.model == 1:
-            nmpc = NMPCTiltBi2OrdServo()
-        else:
-            raise ValueError(f"Invalid model {args.model}.")
-
-    elif args.arch == 'tri':
-
-        if args.model == 0:
-            nmpc = NMPCTiltTriServo()
-        elif args.model == 1:
-            nmpc = NMPCTiltTriServoDist()
-        else:
-            raise ValueError(f"Invalid model {args.model}.")
 
     else:
         raise ValueError(f"Invalid robot architecture {args.arch}.")
@@ -132,26 +65,6 @@ def main(args):
             sim_nmpc = HydrusXiExtWrench(phys=phys_hydrus_xi) 
         else:
             raise ValueError(f"Invalid sim model {args.sim_model}.")
-        # sim_phy = phys_omni if 20 < args.model < 30 else phys_art
-        # if args.sim_model == 0:
-        #     sim_nmpc = NMPCTiltQdServoThrust(phys=sim_phy)  # Consider both the servo delay and the thrust delay
-        # elif args.sim_model == 1:
-        #     sim_nmpc = NMPCTiltQdServoThrustDrag(phys=sim_phy)  # Also consider drag in wrench formulation
-        # else:
-        #     raise ValueError(f"Invalid sim model {args.sim_model}.")
-
-    elif args.arch == 'bi':
-
-        if args.sim_model == 0:
-            sim_nmpc = NMPCTiltBiServo()
-        # elif args.sim_model == 1:
-        #     sim_nmpc = NMPCTiltBi2OrdServo()   # This model is wrong
-        else:
-            raise ValueError(f"Invalid sim model {args.sim_model}.")
-
-    elif args.arch == 'tri':
-
-        sim_nmpc = NMPCTiltTriServo()
 
     else:
         raise ValueError(f"Invalid robot architecture {args.arch}.")
@@ -174,10 +87,10 @@ def main(args):
  
 
     # Sim solver
-    sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, is_build=True)
+    sim_solver = sim_nmpc.create_acados_sim_solver(ts_sim, build=True)
     nx_sim = sim_solver.acados_sim.dims.nx
-    nr = 21
-    r_init = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, np.pi/2, np.pi/2, np.pi/2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    nr = 15
+    r_init = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, np.pi/2, np.pi/2, np.pi/2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     # State Initialization
     x_init_sim = np.zeros(nx_sim)
     x_init_sim[6] = 1.0  # qw
@@ -231,8 +144,8 @@ def main(args):
     target_pxyz = np.array([[0.0, 0.5, 2.0]]).T
     target_prpy = np.array([[0.0, 0.0, 0.0]]).T
     nmpc.acados_init_p[30:33] = [np.pi/2, np.pi/2, np.pi/2]  # Initial joint angles
-    nmpc.acados_init_p[33:39] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # Initial disturbance forces and torques
-    #nmpc.acados_init_p[33:37] = [np.pi, 0.0, np.pi, 0.0]  # Initial gimbal angles
+    # nmpc.acados_init_p[33:39] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # Initial disturbance forces and torques
+    # nmpc.acados_init_p[33:37] = [np.pi, 0.0, np.pi, 0.0]  # Initial gimbal angles
     # xd_ddot = 0.0
     # xd_dot = 0.0
     # xd = 1.03923048
@@ -292,10 +205,12 @@ def main(args):
             target_rpy = np.array([[0.0, 0.0, 0.0]]).T
 
         if t_total_sim > 2.0:
-          
+           # print(nmpc.acados_init_p)
+            pass
             if t_now >= 4:
+                pass
                 #target_xyz = np.array([[1.0, 0.5, 2.0]]).T
-                nmpc.acados_init_p[30:33] = [np.pi/3, np.pi/3, -np.pi/6]
+               # nmpc.acados_init_p[30:33] = [np.pi/3, np.pi/3, -np.pi/6]
                # x_now_sim[16:22] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
                 # u_cmd[4:7] = [np.pi/2, 0, 0] 
             # if 3.0 <= t_now < 5.5:
@@ -307,19 +222,19 @@ def main(args):
                 # nmpc.acados_init_p[30:33] = [0.0, 0.0, 0.0]
                 # target_xyz = np.array([[1.0, 0.0, 0.0]]).T
                 # nmpc.acados_init_p[30:33] = [np.pi/3, np.pi/3, -np.pi/6]
-            if t_now >= 6.0: 
-                target_xyz = np.array([[1.0, 0.5, 2.0]]).T
-                target_rpy = np.array([[0.0, 0.0, -np.pi/6]]).T
+           # if t_now >= 6.0: 
+                #target_xyz = np.array([[1.0, 0.5, 2.0]]).T
+                #target_rpy = np.array([[0.0, 0.0, -np.pi/6]]).T
 
-                if x_now_sim[0] > 0.99:
-                    #x_force = 1000 * (0.99 - x_now_sim[0])
-                    target_force[0, 0] = -est_external_wrench[0]
-                    target_force[1, 0] = -est_external_wrench[1]
-                    target_force[2, 0] = nmpc.acados_init_p[9] * nmpc.acados_init_p[10] - est_external_wrench[2]
-                    target_torque[0, 0] = -est_external_wrench[3]
-                    target_torque[1, 0] = -est_external_wrench[4]
-                    target_torque[2, 0] = -est_external_wrench[5]
-                    nmpc.acados_init_p[33] = -1.0
+                # if x_now_sim[0] > 0.99:
+                #     #x_force = 1000 * (0.99 - x_now_sim[0])
+                #     target_force[0, 0] = -est_external_wrench[0]
+                #     target_force[1, 0] = -est_external_wrench[1]
+                #     target_force[2, 0] = nmpc.acados_init_p[9] * nmpc.acados_init_p[10] - est_external_wrench[2]
+                #     target_torque[0, 0] = -est_external_wrench[3]
+                #     target_torque[1, 0] = -est_external_wrench[4]
+                #     target_torque[2, 0] = -est_external_wrench[5]
+                #     nmpc.acados_init_p[33] = -1.0
                 #u_cmd[4:7] = [np.pi/3, np.pi/3, -np.pi/6]
                 # target_rpy = np.array([[0.0, 0.0, 0.0]]).T
                 # target_xyz = np.array([[1.0, 0.5, 2.0]]).T
@@ -418,25 +333,7 @@ def main(args):
 
         # -------- Update solver --------
         comp_time_start = time.time()
-        # -------- NMPC Controller --------
-        # if t_ctl >= ts_ctrl:
-        #     t_ctl = 0.0
-        #     z_acc = 24.0*(target_xyz[2,0]-x_now[2])+10.0*(0.0-x_now[5]) + 9.798*3.4
-        #     quat = [x_now[7], x_now[8], x_now[9], x_now[6]]
-        #     roll, pitch, yaw = euler_from_quaternion(quat)
-        #     x_acc = 1.0*(target_xyz[0,0]-x_now[0]) + 1.6*(0.0-x_now[3])
-        #     y_acc = 1.0*(target_xyz[1,0]-x_now[1]) + 1.6*(0.0-x_now[4])
-        #     target_roll = -y_acc*np.cos(yaw) + x_acc*np.sin(yaw) / 9.798
-        #     target_pitch = y_acc*np.sin(yaw) + x_acc*np.cos(yaw) / 9.798
-        #     roll_acc = 9.0*(target_roll-roll) + 5.0*(0.0-x_now[10])
-        #     pitch_acc = 9.0*(target_pitch-pitch) + 5.0*(0.0-x_now[11])
-        #     yaw_acc = 9.0*(target_rpy[2,0]-yaw) + 6.0*(0.0-x_now[12])
-        #     mat = nmpc.get_alloc_matrix(nmpc.acados_init_p[4:30], x_now)
-    
-        #     delta_u = np.linalg.pinv(mat) @ np.array([z_acc, roll_acc, pitch_acc, yaw_acc])
-        #     u_cmd[0:4] = np.squeeze(np.asarray(delta_u)) 
-        # -------- Impedance Controller --------
-        
+        # -------- NMPC Controller --------    
         if t_ctl >= ts_ctrl:
             t_ctl = 0.0 
             # 0 ~ N-1
@@ -468,6 +365,8 @@ def main(args):
             est_external_wrench = np.squeeze(np.asarray(ko @ (sum_momentum-external_wrench_I_term)))
             # When the drone is on the ground, ignore the support force.
             est_external_wrench_plt = est_external_wrench.copy()
+            I_matrix = nmpc.get_I_matrix(nmpc.acados_init_p[4:33], x_now)
+            print("I matrix: ", I_matrix)
             if i < 200 * 4:
                 est_external_wrench_plt[2] = 0.0
             # Compute control feedback and take the first action
@@ -607,10 +506,10 @@ def main(args):
         r_now = [target_xyz[0,0], target_xyz[1,0], target_xyz[2,0], 
         target_rpy[0,0], target_rpy[1,0], target_rpy[2,0], 
         nmpc.acados_init_p[30], nmpc.acados_init_p[31], nmpc.acados_init_p[32],
-        nmpc.acados_init_p[33], nmpc.acados_init_p[34], nmpc.acados_init_p[35],
-        nmpc.acados_init_p[36], nmpc.acados_init_p[37], nmpc.acados_init_p[38],
-        est_external_wrench_plt[0], est_external_wrench_plt[1], est_external_wrench_plt[2],
-        est_external_wrench_plt[3], est_external_wrench_plt[4], est_external_wrench_plt[5]]
+        # nmpc.acados_init_p[33], nmpc.acados_init_p[34], nmpc.acados_init_p[35],
+        # nmpc.acados_init_p[36], nmpc.acados_init_p[37], nmpc.acados_init_p[38],
+        ur[ocp_solver.N-1, 4], ur[ocp_solver.N-1, 5], ur[ocp_solver.N-1, 6],
+        ur[ocp_solver.N-1, 7], est_external_wrench_plt[4], est_external_wrench_plt[5]]
   
         # --------- Update visualizer ----------
         viz.update(i, x_now_sim, r_now, u_cmd)  # Note: The recording frequency of u_cmd is the same as ts_sim
