@@ -1,0 +1,7 @@
+<library path="lib/libhydrus_sensor_pluginlib">
+
+  <class name="sensor_plugin/hydrus_imu" type="sensor_plugin::HydrusImu" base_class_type="sensor_plugin::SensorBase">
+    <description>Hydrus IMU sensor plugin for full vectoring control .</description>
+  </class>
+
+</library>

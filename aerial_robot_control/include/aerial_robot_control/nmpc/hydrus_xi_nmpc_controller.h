@@ -35,6 +35,8 @@
 #include "aerial_robot_msgs/TrackTrajGoal.h"
 #include "aerial_robot_msgs/TrackTrajResult.h"
 
+#include "aerial_robot_control/wrench_est/wrench_est_actuator_meas_base.h"
+
 /* opt */
 #include <nlopt.hpp>
 using NMPCControlDynamicConfig = dynamic_reconfigure::Server<aerial_robot_control::NMPCConfig>;
@@ -58,6 +60,9 @@ public:
   bool update() override;
   void reset() override;
 
+  //boost::shared_ptr<pluginlib::ClassLoader<aerial_robot_control::WrenchEstActuatorMeasBase>> wrench_est_loader_ptr_;
+  //boost::shared_ptr<aerial_robot_control::WrenchEstActuatorMeasBase> wrench_est_ptr_;
+
 protected:
   ros::Timer tmr_viz_;
 
@@ -67,6 +72,7 @@ protected:
   ros::Publisher pub_gimbal_control_;            // for gimbal control
   ros::Publisher pub_flight_config_cmd_spinal_;  // for spinal, enable the gyro measurement after the takeoff
   ros::Publisher pub_x_u_ref_;                   // for publishing reference x_u
+  ros::Publisher pub_estimate_external_wrench_;
 
   ros::ServiceClient srv_set_control_mode_;
   std::vector<boost::shared_ptr<NMPCControlDynamicConfig>> nmpc_reconf_servers_;
@@ -81,6 +87,9 @@ protected:
   geometry_msgs::WrenchStamped target_external_wrench_;
   ros::Time time_last_target_external_wrench_;
 
+  bool if_use_est_wrench_4_control_ = false;
+
+  ros::Publisher pub_disturb_wrench_;  // for disturbance wrench
 
   bool is_attitude_ctrl_;
   bool is_body_rate_ctrl_;
@@ -144,6 +153,25 @@ protected:
 
   boost::shared_ptr<aerial_robot_model::RobotModel> robot_model_for_plan_;
 
+  boost::thread wrench_estimate_thread_;
+  Eigen::VectorXd init_sum_momentum_;
+  Eigen::VectorXd integrate_term_;
+  double prev_est_wrench_timestamp_;
+  Eigen::MatrixXd momentum_observer_matrix_;
+  Eigen::VectorXd est_external_wrench_;
+
+  const Eigen::VectorXd getTargetWrenchCog()
+  {
+    std::lock_guard<std::mutex> lock(wrench_mutex_);
+    return target_wrench_cog_;
+  }
+  void setTargetWrenchCog(const Eigen::VectorXd target_wrench_cog)
+  {
+    std::lock_guard<std::mutex> lock(wrench_mutex_);
+    target_wrench_cog_ = target_wrench_cog;
+  }
+  Eigen::VectorXd target_wrench_cog_;
+  std::mutex wrench_mutex_;
 
   /* initialize() */
   void initGeneralParams() override;
@@ -193,6 +221,7 @@ protected:
   void callbackTargetExternalWrench(const geometry_msgs::WrenchStampedConstPtr& msg);
   virtual void cfgNMPCCallback(NMPCConfig& config, uint32_t level);
 
+  void externalWrenchEstimate();
   /* utils */
   // get functions
   double getCommand(int idx_u, double T_horizon = 0.0) const;

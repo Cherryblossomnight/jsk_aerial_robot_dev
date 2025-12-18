@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<robot
+    xmlns:xacro="http://www.ros.org/wiki/xacro" name="box" >
+
+
+  <material name="black">
+    <color rgba="0 0 0 1"/>
+  </material>
+
+
+  <xacro:macro name="frame_model" params="name mass length width height x y z  direction color:=black">
+    <link name="${name}">
+      <visual>
+        <origin xyz="${x} ${y} ${z}" rpy="0 0 ${direction}"/>
+        <geometry>
+          <box size="${length} ${width} ${height}" />
+        </geometry>
+        <material name="${color}"/>
+      </visual>
+      <collision>
+        <origin xyz="${x} ${y} ${z}" rpy="0 0 ${direction}"/>
+        <geometry>
+          <box size="${length} ${width} ${height}" />
+        </geometry>
+      </collision>
+      <inertial>
+        <origin xyz="${x} ${y} ${z}" rpy="0 0 ${direction}"/>
+        <mass value="${mass}"/>
+        <inertia
+            ixx="${0.25 * mass * width * height}" ixy="0.0" ixz="0.0"
+            iyy="${0.25 * mass * width * height}" iyz="0.0"
+            izz="${0.5 * mass * width * height}"/>
+      </inertial>
+    </link>
+  </xacro:macro>
+
+  <xacro:frame_model name="box" mass="1" length="0.8" width="0.8" height="0.8" x="0" y="0" z="0.4" direction="0.00" />
+ 
+
+
+  <!-- TODO: change friction rate to paramter -->
+  <!-- Noet: 0.13 corresponds to 3.5N -->
+  <gazebo reference="box">
+    <material>Gazebo/Black</material>
+    <mu1>0.12</mu1>
+    <mu2>0.12</mu2>
+  </gazebo>
+
+
+
+<!-- 
+  <gazebo>
+    <static>true</static>
+  </gazebo> -->
+
+
+</robot>

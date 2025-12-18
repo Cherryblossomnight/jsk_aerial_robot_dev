@@ -45,6 +45,10 @@ include_directories(
   ${EIGEN3_INCLUDE_DIRS}
 )
 
+add_library(hydrus_sensor_pluginlib  src/imu.cpp)
+target_link_libraries(hydrus_sensor_pluginlib ${catkin_LIBRARIES})
+add_dependencies(hydrus_sensor_pluginlib aerial_robot_msgs_generate_messages_cpp spinal_generate_messages_cpp)
+
 add_library(hydrus_robot_model
   src/hydrus_robot_model.cpp
   src/hydrus_tilted_robot_model.cpp)
