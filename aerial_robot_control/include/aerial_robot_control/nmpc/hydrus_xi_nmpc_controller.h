@@ -73,7 +73,7 @@ protected:
   ros::Publisher pub_flight_config_cmd_spinal_;  // for spinal, enable the gyro measurement after the takeoff
   ros::Publisher pub_x_u_ref_;                   // for publishing reference x_u
   ros::Publisher pub_estimate_external_wrench_;
-
+  ros::Publisher pub_estimate_external_wrench1_;
   ros::ServiceClient srv_set_control_mode_;
   std::vector<boost::shared_ptr<NMPCControlDynamicConfig>> nmpc_reconf_servers_;
 
@@ -88,7 +88,6 @@ protected:
   ros::Time time_last_target_external_wrench_;
 
   bool if_use_est_wrench_4_control_ = false;
-
   ros::Publisher pub_disturb_wrench_;  // for disturbance wrench
 
   bool is_attitude_ctrl_;
@@ -159,6 +158,7 @@ protected:
   double prev_est_wrench_timestamp_;
   Eigen::MatrixXd momentum_observer_matrix_;
   Eigen::VectorXd est_external_wrench_;
+  Eigen::VectorXd est_external_wrench_filtered_;
 
   const Eigen::VectorXd getTargetWrenchCog()
   {
@@ -246,6 +246,8 @@ protected:
   {
     return std::fabs(a - b) < epsilon;
   }
+
+  void filterEstExternalWrench();
 
   bool isMulDOFJointTrajPtEqual(const trajectory_msgs::MultiDOFJointTrajectoryPoint& a,
                                 const trajectory_msgs::MultiDOFJointTrajectoryPoint& b, bool if_compare_time = true,

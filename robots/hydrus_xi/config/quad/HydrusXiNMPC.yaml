@@ -40,9 +40,9 @@ controller:
     Qw_xy: 10
     Qw_z: 10
     Qj: 0.0
-    Qg: 600.0
-    Rt: 10.0
-    Rg: 8.0  # difference of ac
+    Qg: 40.0
+    Rt: 5.0
+    Rg: 30.0  # difference of ac
 
     is_attitude_ctrl: false
     is_body_rate_ctrl: false

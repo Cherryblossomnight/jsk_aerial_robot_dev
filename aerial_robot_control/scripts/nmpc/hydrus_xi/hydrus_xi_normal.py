@@ -59,7 +59,7 @@ class HydrusXiNormal(HydrusXiBase):
 
         state_y_e = state_y
 
-        control_y = ca.vertcat(self.ft_c, self.g_c)
+        control_y = ca.vertcat(self.ft_c, self.g_c - self.g_s)
 
         return state_y, state_y_e, control_y
 
@@ -167,10 +167,10 @@ class HydrusXiNormal(HydrusXiBase):
         ur[:, 2] = ft_ref[2]
         ur[:, 3] = ft_ref[3]
 
-        ur[:, 4] = np.pi
-        ur[:, 5] = 0.0
-        ur[:, 6] = np.pi
-        ur[:, 7] = 0.0
+        # ur[:, 4] = np.pi
+        # ur[:, 5] = 0.0
+        # ur[:, 6] = np.pi
+        # ur[:, 7] = 0.0
         
         return xr, ur
 

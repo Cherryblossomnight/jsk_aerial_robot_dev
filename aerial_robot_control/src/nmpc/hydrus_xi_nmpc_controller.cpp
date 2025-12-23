@@ -39,6 +39,7 @@ void nmpc::HydrusXiNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
   pub_flight_config_cmd_spinal_ = nh_.advertise<spinal::FlightConfigCmd>("flight_config_cmd", 1);
   pub_x_u_ref_ = nh_.advertise<aerial_robot_msgs::PredXU>("x_u_ref", 1);
   pub_estimate_external_wrench_ = nh_.advertise<geometry_msgs::WrenchStamped>("estimated_external_wrench", 1);
+  pub_estimate_external_wrench1_ = nh_.advertise<geometry_msgs::WrenchStamped>("estimated_external_wrench1", 1);
   /* services */
   srv_set_control_mode_ = nh_.serviceClient<spinal::SetControlMode>("set_control_mode");
 
@@ -76,16 +77,6 @@ void nmpc::HydrusXiNMPC::initialize(ros::NodeHandle nh, ros::NodeHandle nhp,
   est_external_wrench_ = Eigen::VectorXd::Zero(6);
 
   prev_est_wrench_timestamp_ = 0;
-
-  // wrench_estimate_thread_ = boost::thread([this]()
-  //                                       {
-  //                                         ros::Rate loop_rate(50.0);
-  //                                         while(ros::ok())
-  //                                           {
-  //                                             externalWrenchEstimate();
-  //                                             loop_rate.sleep();
-  //                                           }
-  //                                       });
 
   reset();
   ROS_INFO("MPC Controller initialized!");
@@ -461,17 +452,17 @@ void nmpc::HydrusXiNMPC::initNMPCParams()
   {
     idx_p_phys_end_ = idx_p_quat_end_;
   }
-  for (int i = 0; i < acados_p.size(); i++)
-  {
- std::cout << "acados_p[" << i << "]=" << acados_p[i] << std::endl;
-  }
+//   for (int i = 0; i < acados_p.size(); i++)
+//   {
+//  std::cout << "acados_p[" << i << "]=" << acados_p[i] << std::endl;
+//   }
 
   KDL::RigidBodyInertia rigid_body =  robot_model_->getInertiaMap().at("link1");
   Eigen::MatrixXd inertia_mtx = aerial_robot_model::kdlToEigen(rigid_body.getRotationalInertia());
-  std::cout<<"inertia_mtx"<<inertia_mtx<<std::endl;
+
   rigid_body =  robot_model_->getInertiaMap().at("gimbal_link1");
   inertia_mtx = aerial_robot_model::kdlToEigen(rigid_body.getRotationalInertia());
-  std::cout<<"inertia_mtx"<<inertia_mtx<<std::endl;
+
   /* set acados parameters */
   mpc_solver_ptr_->setParameters(acados_p);
 }
@@ -658,6 +649,34 @@ void nmpc::HydrusXiNMPC::controlCore()
 
   /* get result */
   // - thrust
+
+  KDL::JntArray joint_positions = robot_model_->getJointPositions(); 
+  for (int i; i < joint_positions.data.size(); i++)
+  {
+   // std::cout<<"x["<<i<<"]="<<joint_positions(i)<<", ";
+  };
+  for(int i = 0; i < 4; i++)
+  { 
+    joint_positions(3 * i) = getCommand(i+4);
+  }
+
+  robot_model_for_plan_->updateRobotModel(joint_positions);
+
+
+  Eigen::MatrixXd A = robot_model_for_plan_->calcWrenchMatrixOnCoG();
+  //Eigen::MatrixXd B = robot_model_->calcWrenchMatrixOnCoG();
+  // std::cout<<"update1"<<A<<std::endl;
+  Eigen::VectorXd thrusts = Eigen::VectorXd::Zero(4);
+  for(int i = 0; i < 4; i++)
+    thrusts(i) = getCommand(i);
+  Eigen::VectorXd desired_wrench = A * thrusts;
+  target_wrench_cog_ = desired_wrench;
+  // Eigen::VectorXd desired_wrench = A * thrusts;
+  // desired_wrench.segment(0, 3) = R * desired_wrench.segment(0, 3); // to world frame
+  // Eigen::VectorXd desired_wrench = robot_model->getDesiredWrench();
+
+  //std::cout<<"desired_wrench:"<<desired_wrench.transpose()<<std::endl;
+
   externalWrenchEstimate();
   for (int i = 0; i < motor_num_; i++)
   {
@@ -755,11 +774,12 @@ void nmpc::HydrusXiNMPC::setPointRefFromNavigator(bool is_shifted_not_set_all)
   tf::Quaternion target_cog_quat;
   target_cog_quat.setRPY(target_cog_rpy.x(), target_cog_rpy.y(), target_cog_rpy.z());
   tf::Vector3 target_cog_omega = navigator_->getTargetOmega();
-  tf::Vector3 target_cog_ext_force_in_w = tf::Vector3(target_external_wrench_.wrench.force.x, target_external_wrench_.wrench.force.y, target_external_wrench_.wrench.force.z);
-  tf::Vector3 target_cog_ext_torque_in_b = tf::Vector3(target_external_wrench_.wrench.torque.x, target_external_wrench_.wrench.torque.y, target_external_wrench_.wrench.torque.z);
- 
+  //tf::Vector3 target_cog_ext_force_in_w = tf::Vector3(target_external_wrench_.wrench.force.x, target_external_wrench_.wrench.force.y, target_external_wrench_.wrench.force.z);
+  //tf::Vector3 target_cog_ext_torque_in_b = tf::Vector3(target_external_wrench_.wrench.torque.x, target_external_wrench_.wrench.torque.y, target_external_wrench_.wrench.torque.z);
+  tf::Vector3 target_cog_ext_force_in_w = tf::Vector3(est_external_wrench_(0), est_external_wrench_(1), est_external_wrench_(2));
+  tf::Vector3 target_cog_ext_torque_in_b = tf::Vector3(est_external_wrench_(3), est_external_wrench_(4), est_external_wrench_(5));
   ros::Duration dt = ros::Time::now() - time_last_target_external_wrench_;
-  if (dt.toSec() > 1.0)
+  if (dt.toSec() > 3.0)
   {
     target_external_wrench_.wrench = geometry_msgs::Wrench();
   }
@@ -767,10 +787,10 @@ void nmpc::HydrusXiNMPC::setPointRefFromNavigator(bool is_shifted_not_set_all)
 // std::cout<<"target_cog_quat:"<<target_cog_quat.w()<<","<<target_cog_quat.x()<<","<<target_cog_quat.y()<<","<<target_cog_quat.z()<<std::endl;
   if (is_shifted_not_set_all)
     setXrUrRef(target_cog_pos_in_w, target_cog_vel_in_w, tf::Vector3(0, 0, 0), target_cog_quat, target_cog_omega,
-              tf::Vector3(0, 0, 0), target_cog_ext_force_in_w, target_cog_ext_torque_in_b, -1);
+              tf::Vector3(0, 0, 0), target_cog_ext_force_in_w, target_cog_ext_torque_in_b, -2);
   else
     setXrUrRef(target_cog_pos_in_w, target_cog_vel_in_w, tf::Vector3(0, 0, 0), target_cog_quat, target_cog_omega,
-              tf::Vector3(0, 0, 0), target_cog_ext_force_in_w, target_cog_ext_torque_in_b, -1);
+              tf::Vector3(0, 0, 0), target_cog_ext_force_in_w, target_cog_ext_torque_in_b, -2);
 
   rosXU2VecXU(x_u_ref_, mpc_solver_ptr_->xr_, mpc_solver_ptr_->ur_);
   mpc_solver_ptr_->setReference(mpc_solver_ptr_->xr_, mpc_solver_ptr_->ur_, true);
@@ -840,6 +860,14 @@ void nmpc::HydrusXiNMPC::setXrUrRef(const tf::Vector3& ref_pos_i, const tf::Vect
                 x_u_ref_.u.data.begin() + NU * i);
     }
 
+    aerial_robot_msgs::PredXU x_u_ref_msg;
+    x_u_ref_msg.header.stamp = ros::Time::now();
+    for (int i = 0; i < x.size(); i++)
+      x_u_ref_msg.x.data.push_back(x_u_ref_.x.data[i]);
+    for (int i = 0; i < u.size(); i++)
+      x_u_ref_msg.u.data.push_back(x_u_ref_.u.data[i]);
+    pub_x_u_ref_.publish(x_u_ref_msg);
+
     // std::cout<<"ref_x:"<<std::endl;
     // for(int i=0;i<NX;i++)
     //   std::cout<<x[i]<<",";
@@ -862,6 +890,14 @@ void nmpc::HydrusXiNMPC::setXrUrRef(const tf::Vector3& ref_pos_i, const tf::Vect
     }
     std::copy(x.begin(), x.begin() + NX, x_u_ref_.x.data.begin() + NX * NN);
 
+    aerial_robot_msgs::PredXU x_u_ref_msg;
+    x_u_ref_msg.header.stamp = ros::Time::now();
+    for (int i = 0; i < x.size(); i++)
+      x_u_ref_msg.x.data.push_back(x_u_ref_.x.data[i]);
+    for (int i = 0; i < u.size(); i++)
+      x_u_ref_msg.u.data.push_back(x_u_ref_.u.data[i]);
+    pub_x_u_ref_.publish(x_u_ref_msg);
+
     return;
   }
 
@@ -875,6 +911,8 @@ void nmpc::HydrusXiNMPC::setXrUrRef(const tf::Vector3& ref_pos_i, const tf::Vect
   if (horizon_idx < NN)
     std::copy(u.begin(), u.begin() + NU, x_u_ref_.u.data.begin() + NU * horizon_idx);
   std::cout<<"set ref at horizon idx "<<std::endl;
+
+  
 
 }
 
@@ -1070,18 +1108,7 @@ void nmpc::HydrusXiNMPC::allocateToXU(const tf::Vector3& ref_pos_i, const tf::Ve
     }
     //std::cout <<"count: "<<count_<< std::endl;
     
-    Eigen::MatrixXd A = robot_model_for_plan_->calcWrenchMatrixOnCoG();
-    Eigen::MatrixXd B = robot_model_->calcWrenchMatrixOnCoG();
-   // std::cout<<"update1"<<A<<std::endl;
-    Eigen::VectorXd thrusts = Eigen::VectorXd::Zero(4);
-    for(int i = 0; i < 4; i++)
-      thrusts(i) = opt_result_[i];
-    Eigen::VectorXd desired_wrench = A * thrusts;
-    //Eigen::VectorXd desired_wrench = A * thrusts;
-    desired_wrench.segment(0, 3) = R * desired_wrench.segment(0, 3); // to world frame
-    //Eigen::VectorXd desired_wrench = robot_model->getDesiredWrench();
 
-    std::cout<<"desired_wrench:"<<desired_wrench.transpose()<<std::endl;
     //count_ = 0;
   }
   Eigen::MatrixXd A = robot_model_for_plan_->calcWrenchMatrixOnCoG();
@@ -1089,7 +1116,7 @@ void nmpc::HydrusXiNMPC::allocateToXU(const tf::Vector3& ref_pos_i, const tf::Ve
   for(int i = 0; i < 4; i++)
     thrusts(i) = opt_result_[i];
   Eigen::VectorXd desired_wrench = A * thrusts;
-  target_wrench_cog_ = desired_wrench;
+  //target_wrench_cog_ = desired_wrench;
   count_++;
   std::vector<double> ft_ref_vec(motor_num_);
   std::vector<double> g_ref_vec(gimbal_num_);
@@ -1152,13 +1179,7 @@ void nmpc::HydrusXiNMPC::allocateToXU(const tf::Vector3& ref_pos_i, const tf::Ve
     u.at(i + 4) = g_ref_vec[i];
   }
 
-  aerial_robot_msgs::PredXU x_u_ref_msg;
-  x_u_ref_msg.header.stamp = ros::Time::now();
-  for (int i = 0; i < x.size(); i++)
-    x_u_ref_msg.x.data.push_back(x[i]);
-  for (int i = 0; i < u.size(); i++)
-    x_u_ref_msg.u.data.push_back(u[i]);
-  pub_x_u_ref_.publish(x_u_ref_msg);
+
   //std::cout<<x_u_ref_msg<<std::endl;
   if (alloc_type_ == 0)
     return;
@@ -1703,7 +1724,32 @@ void nmpc::HydrusXiNMPC::externalWrenchEstimate()
   wrench_msg.wrench.torque.y = est_external_wrench_(4);
   wrench_msg.wrench.torque.z = est_external_wrench_(5);
   pub_estimate_external_wrench_.publish(wrench_msg);
+   geometry_msgs::WrenchStamped wrench_msg2;
+   wrench_msg2.wrench.force.x = target_wrench_cog(0);
+   wrench_msg2.wrench.force.y = target_wrench_cog(1);
+   wrench_msg2.wrench.force.z = target_wrench_cog(2);
+   wrench_msg2.wrench.torque.x = target_wrench_cog(3);
+   wrench_msg2.wrench.torque.y = target_wrench_cog(4);
+   wrench_msg2.wrench.torque.z = target_wrench_cog(5);
+  pub_estimate_external_wrench1_.publish(wrench_msg2);
   prev_est_wrench_timestamp_ = ros::Time::now().toSec();
+  filterEstExternalWrench();
+}
+
+void nmpc::HydrusXiNMPC::filterEstExternalWrench()
+{
+  est_external_wrench_filtered_ = est_external_wrench_;
+  for (int i = 0; i < 6; i++)
+  {
+    if (i < 3)
+    {
+      est_external_wrench_filtered_[i] /= 1 + exp(-10*(abs(est_external_wrench_filtered_[i]) - 0.5));
+    }
+    else
+    {
+      est_external_wrench_filtered_[i] /= 1 + exp(-10*(abs(est_external_wrench_filtered_[i]) - 0.2));
+    }
+  }
 }
 
 double nmpc::HydrusXiNMPC::ensureOneServoContinuity(double a_ref, int idx) const

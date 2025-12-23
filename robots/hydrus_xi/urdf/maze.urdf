@@ -40,16 +40,11 @@
   </xacro:macro>
 
   <xacro:frame_model name="main_frame1" mass="${frame_mass}" length="1.5" width="0.02" x="0.75" y="-0.5" height="${0.5 * $(arg opening_height)}" thickness="$(arg opening_height)" direction="0.00" />
-  <xacro:frame_model name="main_frame2" mass="${frame_mass}" length="1" width="0.02" x="1" y="0.5"  height="${0.5 * $(arg opening_height)}" thickness="$(arg opening_height)" direction="0.00" />
+  
   <xacro:frame_model name="main_frame3" mass="${frame_mass}" length="0.02" width="4" x="-1" y="-0.5"  height="${0.5 * $(arg opening_height)}" thickness="$(arg opening_height)" direction="0.00"  />
   <xacro:frame_model name="main_frame4" mass="${frame_mass}" length="0.02" width="2" x="0" y="-1.5"  height="${0.5 * $(arg opening_height)}" thickness="$(arg opening_height)" direction="0.00"  />
 
-  <joint name="frame_joint1" type="fixed">
-    <parent link="main_frame1"/>
-    <child link="main_frame2"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-    <axis xyz="0 0 1"/>
-  </joint>
+
   <joint name="frame_joint2" type="fixed">
     <parent link="main_frame1"/>
     <child link="main_frame3"/>
@@ -71,11 +66,7 @@
     <mu2>0.001</mu2>
   </gazebo>
 
-  <gazebo reference="main_frame2">
-    <material>Gazebo/Red</material>
-    <mu1>0.13</mu1>
-    <mu2>0.13</mu2>
-  </gazebo>
+
 
   <gazebo reference="main_frame3">
     <material>Gazebo/Red</material>

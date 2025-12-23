@@ -90,12 +90,12 @@
   ###########  Servo Bridge  ###########
   <node pkg="aerial_robot_model" type="servo_bridge_node" name="servo_bridge" output="screen" ns="$(arg robot_ns)" />
 
- <!-- <group if="$(eval arg('simulation'))">
+ <group if="$(eval arg('simulation'))">
     <param name="box/robot_description" command="$(find xacro)/xacro $(find hydrus_xi)/urdf/box.urdf" />
     <node pkg="gazebo_ros" type="spawn_model" name="box_spawn" args="-param box/robot_description -urdf -x -1.0 -y 0 -z 0 -model box" />
      <param name="maze/robot_description" command="$(find xacro)/xacro $(find hydrus_xi)/urdf/maze.urdf" />
     <node pkg="gazebo_ros" type="spawn_model" name="maze_spawn" args="-param maze/robot_description -urdf -x -3.0 -y 0 -z 0 -model maze" />
-  </group> -->
+  </group>
 
   ########## Simulation in Gazebo #########
   <include file="$(find aerial_robot_simulation)/launch/simulation.launch" if = "$(eval arg('simulation') * (1 - arg('real_machine')))" >

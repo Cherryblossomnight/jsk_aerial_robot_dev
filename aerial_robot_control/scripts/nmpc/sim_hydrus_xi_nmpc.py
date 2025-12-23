@@ -366,7 +366,7 @@ def main(args):
             # When the drone is on the ground, ignore the support force.
             est_external_wrench_plt = est_external_wrench.copy()
             I_matrix = nmpc.get_I_matrix(nmpc.acados_init_p[4:33], x_now)
-            print("I matrix: ", I_matrix)
+            #print("I matrix: ", I_matrix)
             if i < 200 * 4:
                 est_external_wrench_plt[2] = 0.0
             # Compute control feedback and take the first action
