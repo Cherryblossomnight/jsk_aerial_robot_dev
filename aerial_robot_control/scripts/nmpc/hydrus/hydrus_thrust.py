@@ -3,7 +3,7 @@
 import numpy as np
 import casadi as ca
 from hydrus_base import HydrusBase
-from tilt_qd import phys_param_beetle_omni as phys_omni
+from nmpc_tilt_mt.tilt_qd import phys_param_beetle_omni as phys_omni
 
 
 class HydrusThrust(HydrusBase):
@@ -23,15 +23,15 @@ class HydrusThrust(HydrusBase):
         self.tilt = False
         self.include_servo_model = True
         self.include_servo_derivative = False
-        self.include_servo_dynamic = True
+        self.include_servo_dynamic = False
         self.include_thrust_model = False   # TODO extend to include_thrust_derivative
         self.include_cog_dist_model = True
         self.include_cog_dist_parameter = False
         self.include_impedance = False
-        self.include_end_effector_dist_model = True
+        self.include_end_effector_dist_model = False
 
         # Read parameters from configuration file in the robot's package
-        self.read_params("controller", "nmpc", "beetle", "BeetleNMPCFull.yaml")
+        self.read_params("controller", "nmpc", "hydrus", "quad/default_mode_201907/HydrusNMPC.yaml")
 
         # Create acados model & solver and generate c code
         super().__init__(overwrite)
@@ -54,15 +54,11 @@ class HydrusThrust(HydrusBase):
             qe_z + self.qzr,
             self.w,
             self.j_s,
-            self.w_s,
-            self.fds_w,
-            self.tau_ds_b,
-            self.fde_w,
         )
 
         state_y_e = state_y
 
-        control_y = ca.vertcat(self.ft_c, self.j_c)
+        control_y = ca.vertcat(self.ft_c)
 
         return state_y, state_y_e, control_y
 
@@ -83,41 +79,26 @@ class HydrusThrust(HydrusBase):
                 self.params["Qw_xy"],
                 self.params["Qw_xy"],
                 self.params["Qw_z"],
-                self.params["Qj1"],
-                self.params["Qj2"],
-                self.params["Qj3"], # joint angles
-                self.params["Qw1"],
-                self.params["Qw2"],
-                self.params["Qw3"], # joint velocities
-                1,
-                1,
-                1, 
-                1,
-                1,
-                1, # disturbance
-                1,
-                1,
-                1, # end_effector
+                0,
+                0,
+                0,
             ]
         )
         print("Q: \n", Q)
 
         R = np.diag(
             [
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
+                self.params["Rt"],
+                self.params["Rt"],
+                self.params["Rt"],
+                self.params["Rt"],
             ]
         )
         print("R: \n", R)
 
         return Q, R
 
-    def get_reference(self, target_xyz, target_qwxyz):
+    def get_reference(self, target_xyz, target_qwxyz, target_vxyz, target_wrpy):
         """
         Assemble reference trajectory from target pose and reference control values.
         Gets called from reference generator class.

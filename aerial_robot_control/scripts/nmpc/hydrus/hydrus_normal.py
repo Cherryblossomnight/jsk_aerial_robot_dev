@@ -3,7 +3,7 @@
 import numpy as np
 import casadi as ca
 from hydrus_base import HydrusBase
-from tilt_qd import phys_param_beetle_omni as phys_omni
+from nmpc_tilt_mt.tilt_qd import phys_param_beetle_omni as phys_omni
 
 
 class HydrusNormal(HydrusBase):

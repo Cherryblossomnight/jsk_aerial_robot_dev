@@ -6,7 +6,7 @@ import casadi as ca
 
 # Add parent directory to path to allow relative imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from rh_base import RecedingHorizonBase
+from nmpc_tilt_mt.rh_base import RecedingHorizonBase
 from hydrus.hydrus_reference_generator import HydrusReferenceGenerator
 
 
@@ -69,6 +69,8 @@ class HydrusBase(RecedingHorizonBase):
     def get_reference_generator(self) -> HydrusReferenceGenerator:
         return self._reference_generator
 
+        
+
     def create_acados_model(self) -> AcadosModel:
         """
         Define generic state-space, acados model parameters, control inputs for kinematics of a quadrotor.
@@ -128,17 +130,6 @@ class HydrusBase(RecedingHorizonBase):
 
         # - Extend state-space by disturbance on CoG (actual)
         # Differentiate between actual disturbance set as state and set as parameter
-        if self.include_cog_dist_model:
-            # Force disturbance applied to CoG in World frame
-            self.fds_w = ca.SX.sym("fds_w", 3)
-            # Torque disturbance applied to CoG in Body frame
-            self.tau_ds_b = ca.SX.sym("tau_ds_b", 3)
-
-            self.states = ca.vertcat(self.states, self.fds_w, self.tau_ds_b)
-        else:
-            self.fds_w = ca.vertcat(0.0, 0.0, 0.0)
-            self.tau_ds_b = ca.vertcat(0.0, 0.0, 0.0)
-
         if self.include_end_effector_dist_model:
             self.fde_w = ca.SX.sym("fde_w", 3)
             self.states = ca.vertcat(self.states, self.fde_w)
@@ -219,9 +210,9 @@ class HydrusBase(RecedingHorizonBase):
         phy_params = ca.vertcat(self.l, mass, self.m, self.gravity, I1xx, I1yy, I1zz, I2xx, I2yy, I2zz, I3xx, I3yy, I3zz, I4xx, I4yy, I4zz, self.kq_d_kt,
                                 self.dr1, self.dr2, self.dr3, self.dr4, t_rotor, t_servo)
         parameters = ca.vertcat(parameters, phy_params)
-
+        parameters = ca.vertcat(parameters, self.j_c)
         # - Extend model parameters by CoG disturbance
-        if self.include_cog_dist_parameter:
+        if self.include_cog_dist_model:
             # Force disturbance applied to CoG in World frame
             self.fdp_w = ca.SX.sym("fdp_w", 3)
             # Torque disturbance applied to CoG in Body frame
@@ -231,6 +222,19 @@ class HydrusBase(RecedingHorizonBase):
         else:
             self.fdp_w = ca.vertcat(0.0, 0.0, 0.0)
             self.tau_dp_b = ca.vertcat(0.0, 0.0, 0.0)
+
+
+        # - Extend model parameters by CoG disturbance
+        # if self.include_cog_dist_parameter:
+        #     # Force disturbance applied to CoG in World frame
+        #     self.fdp_w = ca.SX.sym("fdp_w", 3)
+        #     # Torque disturbance applied to CoG in Body frame
+        #     self.tau_dp_b = ca.SX.sym("tau_dp_b", 3)
+
+        #     parameters = ca.vertcat(parameters, self.fdp_w, self.tau_dp_b)
+        # else:
+        #     self.fdp_w = ca.vertcat(0.0, 0.0, 0.0)
+        #     self.tau_dp_b = ca.vertcat(0.0, 0.0, 0.0)
 
         # - Extend model parameters by virtual mass and inertia for impedance cost function
         if self.include_impedance:
@@ -248,7 +252,7 @@ class HydrusBase(RecedingHorizonBase):
             mq = ca.vertcat(self.mqx, self.mqy, self.mqz)
 
             parameters = ca.vertcat(parameters, mp, mq)
-        parameters = ca.vertcat(parameters, self.j_c)
+
         # Transformation matrices between coordinate systems World, Body, End-of-arm, Rotor using quaternions
         # - Root to CoG
         rot_r2c = ca.vertcat(
@@ -375,6 +379,8 @@ class HydrusBase(RecedingHorizonBase):
             [[self.tran_c_4[0] / denominator, -self.tran_c_4[1] / denominator, 0], [self.tran_c_4[1] / denominator, self.tran_c_4[0] / denominator, 0],
              [0, 0, 1]])
 
+        self.fds_w = ca.vertcat(0.0, 0.0, 0.0)
+        self.tau_ds_b = ca.vertcat(0.0, 0.0, 0.0)
         # - End-of-arm to Rotor
         # Take tilt rotation with angle alpha (a) of R frame to E frame into account
         if self.tilt:
@@ -524,11 +530,9 @@ class HydrusBase(RecedingHorizonBase):
                             )
 
         # - Extend model by disturbances simply to match state dimensions
-        if self.include_cog_dist_model:
-            ds = ca.vertcat(ds,
-                            ca.vertcat(0.0, 0.0, 0.0),
-                            ca.vertcat(0.0, 0.0, 0.0),
-                            )
+        # if self.include_cog_dist_model:
+        #     ds = ca.vertcat(ds,
+        #                     )
         if self.include_end_effector_dist_model:
             ds = ca.vertcat(ds,
                             ca.vertcat(0.0, 0.0, 0.0),
@@ -564,6 +568,8 @@ class HydrusBase(RecedingHorizonBase):
         model.xdot = x_dot
         model.u = controls
         model.p = parameters
+        print("aaa")
+        print(model.p)
         model.cost_y_expr = ca.vertcat(state_y, control_y)  # NONLINEAR_LS
         model.cost_y_expr_e = state_y_e
 
@@ -605,6 +611,12 @@ class HydrusBase(RecedingHorizonBase):
         c_vector = ca.cross(self.w, ca.mtimes(self.I, self.w))
         c_vector_fun = ca.Function('c_vector_fun', [model.p[4:30], model.x], [c_vector])
         return np.squeeze(np.array(c_vector_fun(params, x_now).full()))
+
+    # def get_pvector(self, params, x_now):
+    #     model = super().get_acados_model()
+    #     p = self.fdp_w
+    #     p_vector_fun = ca.Function('p_vector_fun', [model.p[4:30], model.x], [p])
+    #     return np.squeeze(np.array(p_vector_fun(params, x_now).full()))
     
     def get_I_matrix(self, params, x_now):
         model = super().get_acados_model()
@@ -646,7 +658,7 @@ class HydrusBase(RecedingHorizonBase):
         sol = solver(x0=x_now[13:16], p=params[0:6], lbg=[-np.pi/2,-np.pi/2,-np.pi/2], ubg=[np.pi/2,np.pi/2,np.pi/2])
         return np.array(sol['x'].full().flatten())
     
-    def create_acados_ocp_solver(self) -> AcadosOcpSolver:
+    def create_acados_ocp_solver(self, build: bool = True) -> AcadosOcpSolver:
         """
         Create generic acados solver for NMPC framework of a quadrotor.
         Generate c code into source folder in aerial_robot_control to be used in workflow.
@@ -908,7 +920,6 @@ class HydrusBase(RecedingHorizonBase):
 
         acados_sim = AcadosSim()
         acados_sim.model = ocp_model
-
 
         n_u = ocp_model.u.size()[0]  # 获取控制输入的维度
         n_param = ocp_model.p.size()[0]
